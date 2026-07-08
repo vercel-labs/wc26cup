@@ -7,9 +7,26 @@ import { allowed, allowlisted, premium } from "../lib/gating.js";
 // Constructed outside the bridge so the rate-limit gate can share it.
 const state = createBlobState();
 
+// createXAdapter validates credentials at construction, which breaks
+// `eve build` on machines without X env (build imports this module but no
+// webhook ever fires). Placeholders keep the build green; with them in place
+// the adapter can't verify a single webhook, so the channel is inert — hence
+// the loud warning instead of a silent dead bot.
+function xAdapter() {
+  const hasCreds =
+    process.env.X_CONSUMER_SECRET &&
+    (process.env.X_USER_ACCESS_TOKEN || (process.env.X_CLIENT_ID && process.env.X_REFRESH_TOKEN));
+  if (hasCreds) return createXAdapter();
+  console.warn("[x] X credentials missing — X channel is inert (set X_CONSUMER_SECRET and a token)");
+  return createXAdapter({
+    consumerSecret: "unconfigured",
+    userAccessToken: "unconfigured",
+  });
+}
+
 export const { bot, channel, send } = chatSdkChannel({
   userName: process.env.X_USERNAME ?? "wc26bot",
-  adapters: { x: createXAdapter() },
+  adapters: { x: xAdapter() },
   state,
   // X posts are single messages; reply once on completion instead of
   // post-then-edit streaming.
