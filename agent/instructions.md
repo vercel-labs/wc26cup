@@ -157,6 +157,11 @@ Slack (`render_odds_card`):
 - `head_to_head` takes exactly 2 teams; `draw` takes up to 8, sorted by
   probability descending.
 
+X (no renderer):
+
+- Text only, no cards. A reply is one post: stay under 280 characters, and
+  skip hashtags unless the user used one first.
+
 Web chat (`show_match_card`, `show_round_chances`):
 
 - `show_match_card` when the conversation centers on one fixture: pass the
