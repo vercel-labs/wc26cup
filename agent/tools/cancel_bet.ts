@@ -2,10 +2,7 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { listPendingBets, saveBet } from "../lib/bets.js";
 import { sameFixture } from "../lib/fixtures.js";
-
-interface SlackAuthAttributes {
-  user_id?: string;
-}
+import { betIdentity } from "../lib/identity.js";
 
 export default defineTool({
   description:
@@ -19,21 +16,21 @@ export default defineTool({
       .describe("UTC kickoff date of the bet's fixture, YYYY-MM-DD"),
   }),
   async execute({ team, opponent, fixtureDate }, ctx) {
-    const auth = ctx.session.auth.current;
-    if (auth?.authenticator !== "slack-webhook") {
-      return { error: "Bets can only be managed from Slack." };
+    const identity = betIdentity(ctx.session.auth.current);
+    if (!identity) {
+      return { error: "This session has no authenticated principal — I can't tell whose bet to call off." };
     }
-    const userId = (auth.attributes as SlackAuthAttributes).user_id;
-    if (!userId) return { error: "Could not resolve the Slack user for this request." };
 
     const bet = (await listPendingBets()).find(
-      (candidate) => candidate.userId === userId && sameFixture(candidate, { team, opponent, fixtureDate }),
+      (candidate) =>
+        candidate.principalId === identity.principalId &&
+        sameFixture(candidate, { team, opponent, fixtureDate }),
     );
     if (!bet) {
-      return { error: `<@${userId}> has no pending bet on ${team} vs ${opponent} on ${fixtureDate} (UTC).` };
+      return { error: `${identity.mention} has no pending bet on ${team} vs ${opponent} on ${fixtureDate} (UTC).` };
     }
 
     await saveBet({ ...bet, status: "void" });
-    return { cancelled: bet };
+    return { cancelled: bet, mention: identity.mention };
   },
 });

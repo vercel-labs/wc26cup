@@ -80,14 +80,18 @@ export default defineSchedule({
 
           await saveBet({ ...bet, status: outcome.status });
 
+          // Bets from surfaces without a channel (e.g. web chat) settle
+          // silently in the ledger; the user asks the bot for the outcome.
+          if (!bet.slack) continue;
+
           await receive(slack, {
             message:
-              `Settle a fictitious bet (no money involved). <@${bet.userId}> bet that ` +
+              `Settle a fictitious bet (no money involved). <@${bet.slack.userId}> bet that ` +
               `${bet.team} would beat ${bet.opponent} (${bet.round}, ${bet.fixtureDate} UTC). ` +
               `Final: ${outcome.score}. They ${outcome.status.toUpperCase()}. ` +
-              `Announce the result in the channel in your usual voice, mentioning them as <@${bet.userId}> — ` +
+              `Announce the result in the channel in your usual voice, mentioning them as <@${bet.slack.userId}> — ` +
               `congratulate a win (and hint at the promised gift), console a loss with one gentle tease.`,
-            target: { channelId: bet.channelId },
+            target: { channelId: bet.slack.channelId },
             auth: appAuth,
           });
         }

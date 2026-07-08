@@ -8,10 +8,11 @@ import { list, put } from "@vercel/blob";
 
 export interface BetRecord {
   id: string;
-  /** Slack ids from the session auth context at record time. */
-  userId: string;
-  userName: string | null;
-  channelId: string;
+  /** Stable principal from the session auth context — works for any authenticator (Slack, Vercel OIDC, …). */
+  principalId: string;
+  displayName: string | null;
+  /** Announcement target, present only when the bet was placed from Slack. Other surfaces settle silently in the ledger. */
+  slack: { userId: string; channelId: string } | null;
   /** The team the user is backing, and who they must beat. */
   team: string;
   opponent: string;
