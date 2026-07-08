@@ -16,7 +16,6 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@chat-adapter/state-redis": "^4.33.0",
     "@chat-adapter/x": "^4.33.0",
     "@radix-ui/react-use-controllable-state": "1.2.2",
     "@resvg/resvg-js": "^2.6.2",

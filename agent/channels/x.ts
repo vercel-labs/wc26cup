@@ -1,11 +1,11 @@
-import { createRedisState } from "@chat-adapter/state-redis";
 import { createXAdapter } from "@chat-adapter/x";
 import type { Message, Thread } from "chat";
 import { chatSdkChannel } from "eve/channels/chat-sdk";
+import { createBlobState } from "../lib/blob-state.js";
 import { allowed, premium } from "../lib/gating.js";
 
 // Constructed outside the bridge so the rate-limit gate can share it.
-const state = createRedisState();
+const state = createBlobState();
 
 export const { bot, channel, send } = chatSdkChannel({
   userName: process.env.X_USERNAME ?? "wc26bot",
