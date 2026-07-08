@@ -96,3 +96,46 @@ input,
 textarea {
   font: inherit;
 }
+
+/* Keepy-uppy loader (app/_components/embaixadinha.tsx). The ball falls with
+   ease-in and rises with ease-out; the boot flicks up at contact (50%). */
+.embaixadinha-ball {
+  animation: embaixadinha-ball 0.95s infinite;
+}
+
+.embaixadinha-boot {
+  transform-box: fill-box;
+  transform-origin: 20% 90%;
+  animation: embaixadinha-boot 0.95s infinite;
+}
+
+@keyframes embaixadinha-ball {
+  0%,
+  100% {
+    transform: translateY(0);
+    animation-timing-function: ease-in;
+  }
+  50% {
+    transform: translateY(19px);
+    animation-timing-function: ease-out;
+  }
+}
+
+@keyframes embaixadinha-boot {
+  0%,
+  32%,
+  74%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-18deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .embaixadinha-ball,
+  .embaixadinha-boot {
+    animation: none;
+  }
+}
