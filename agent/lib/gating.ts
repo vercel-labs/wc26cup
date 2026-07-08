@@ -16,6 +16,28 @@ function premiumOnly(): boolean {
   return process.env.WC_PREMIUM_ONLY === "true";
 }
 
+function handles(): string[] | null {
+  const raw = process.env.WC_ALLOWED_USERS;
+  if (!raw) return null;
+  const names = raw
+    .split(",")
+    .map((name) => name.trim().replace(/^@/, "").toLowerCase())
+    .filter(Boolean);
+  return names.length > 0 ? names : null;
+}
+
+/**
+ * Temporary launch allowlist: when WC_ALLOWED_USERS is set (comma-separated
+ * handles, with or without @), only those authors get replies. Unset the env
+ * var to open the bot up — no deploy needed.
+ */
+export function allowlisted(message: Message): boolean {
+  const names = handles();
+  if (!names) return true;
+  const handle = message.author.userName?.replace(/^@/, "").toLowerCase();
+  return Boolean(handle && names.includes(handle));
+}
+
 type RawUser = { verified?: boolean; verified_type?: string };
 
 function author(message: Message): RawUser | undefined {
