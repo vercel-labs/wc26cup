@@ -14,12 +14,19 @@ digest for anyone to read now.
    records broken, star performances, hat-tricks, injuries to big names,
    dramatic endings, notable odds swings. This tournament only — skip
    transfer gossip, club football, and anything about other competitions.
-4. Save at most 4 genuinely new items with `save_wc_note`. Each note is one
-   or two factual sentences with teams and the UTC date, the kind of fact a
-   good companion brings up ("Haaland scored twice as Norway knocked Brazil
-   out 2-1 — Norway's first semifinal ever"). Facts only, sourced only — a
-   note you couldn't cite doesn't get saved. The wit happens later, in
-   conversation; notes stay deadpan.
+4. Draft at most 4 genuinely new items. Each note is one or two factual
+   sentences with teams and the UTC date the match was played (from the
+   source, not today's date), the kind of fact a good companion brings up
+   ("Haaland scored twice as Norway knocked Brazil out 2-1 — Norway's first
+   semifinal ever"). Facts only, sourced only — a note you couldn't cite
+   doesn't get saved. The wit happens later, in conversation; notes stay
+   deadpan.
+5. Verify before saving: for each draft, re-read the search results and
+   confirm three things verbatim in a source — who played whom, the score or
+   outcome, and the match date. Results from the same day are easy to fuse
+   into one false fact (wrong opponent, wrong scorer's team); if the exact
+   pairing isn't stated in a source, the note doesn't get saved. Only then
+   call `save_wc_note`.
 
 If web search is unavailable, derive notes from the schedule scores and odds
 moves alone. If nothing genuinely noteworthy happened, save nothing and
