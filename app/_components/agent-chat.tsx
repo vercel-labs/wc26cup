@@ -15,7 +15,6 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { cn } from "@/lib/utils";
 import { AgentMessage } from "./agent-message";
-import { Embaixadinha } from "./embaixadinha";
 
 const AGENT_NAME = "wc26bot";
 
@@ -25,15 +24,6 @@ export function AgentChat() {
   const agent = useEveAgent();
   const isBusy = agent.status === "submitted" || agent.status === "streaming";
   const isEmpty = agent.data.messages.length === 0;
-
-  // Juggle while nothing of the reply is visible yet: turn submitted, or
-  // streaming but the last message has no renderable part.
-  const lastMessage = agent.data.messages.at(-1);
-  const awaitingReply =
-    agent.status === "submitted" ||
-    (agent.status === "streaming" &&
-      (lastMessage?.role !== "assistant" ||
-        lastMessage.parts.every((part) => part.type === "step-start")));
 
   const handleSubmit = async (message: PromptInputMessage) => {
     const text = message.text.trim();
@@ -86,7 +76,6 @@ export function AgentChat() {
                 onInputResponses={(inputResponses) => agent.send({ inputResponses })}
               />
             ))}
-            {awaitingReply ? <Embaixadinha className="size-9" /> : null}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
@@ -102,11 +91,7 @@ export function AgentChat() {
       >
         {isEmpty ? (
           <div className="flex flex-col items-center gap-3 text-center">
-            <Embaixadinha className="size-12" />
             <h1 className="font-medium text-5xl tracking-tighter">{AGENT_NAME}</h1>
-            <p className="text-muted-foreground text-sm">
-              World Cup 2026 odds, live from the markets
-            </p>
           </div>
         ) : null}
         <div className="w-full">{composer}</div>
