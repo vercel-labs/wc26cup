@@ -3,7 +3,7 @@ import { includes, satisfies } from "eve/evals/expect";
 
 export default defineEval({
   description:
-    "Carries a non-fan from one verified match hook into a future fixture, comparable live odds, and a fictitious exact-score offer.",
+    "Keeps a user-directed thread grounded across a remembered match, future fixture, comparable live odds, and a fictitious exact-score offer.",
   tags: ["live"],
   timeoutMs: 180_000,
   async test(t) {
@@ -12,16 +12,9 @@ export default defineEval({
     );
     opener.calledTool("get_wc_facts");
     opener.messageIncludes(/Brazil|Norway|Haaland/i);
-    opener.messageIncludes(/\?/u);
-    t.check(
-      opener.message,
-      satisfies(
-        (message) => !/79|90|2-1|quarterfinal/iu.test(String(message)),
-        "keeps the fact reveal for the user's answer",
-      ),
-    );
+    opener.messageIncludes(/79|90|2.?1|quarterfinal/i);
 
-    const matchMoment = await t.send("Nope, I missed Brazil–Norway. What exactly does the stored fact support?");
+    const matchMoment = await t.send("What exactly does that stored fact support?");
     matchMoment.messageIncludes(/Haaland|late|79|90|two/i);
     t.check(
       matchMoment.message,

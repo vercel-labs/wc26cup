@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requestTimeZoneAttributes, resolveUserTimeZone } from "../agent/lib/timezones.js";
+import { calendarDate, requestTimeZoneAttributes, resolveUserTimeZone } from "../agent/lib/timezones.js";
+
+test("calendar date follows the requested civil time zone", () => {
+  const instant = "2026-07-10T01:00:00Z";
+  assert.equal(calendarDate(instant, "America/New_York"), "2026-07-09");
+  assert.equal(calendarDate(instant, "Europe/Paris"), "2026-07-10");
+  assert.throws(() => calendarDate("not-a-date", "America/New_York"), /Invalid date/u);
+  assert.throws(() => calendarDate(instant, "not-a-zone"), /Invalid IANA time zone/u);
+});
 
 test("time zone precedence uses explicit, profile, browser, then IP", () => {
   const attributes = {

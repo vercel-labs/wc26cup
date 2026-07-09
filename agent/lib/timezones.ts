@@ -7,6 +7,28 @@ export interface ResolvedTimeZone {
   readonly timeZone: string;
 }
 
+export function calendarDate(value: Date | string, timeZone: string): string {
+  if (!isIanaTimeZone(timeZone)) throw new Error(`Invalid IANA time zone: ${timeZone}`);
+  const instant = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(instant.valueOf())) throw new Error(`Invalid date: ${String(value)}`);
+
+  const parts = new Map(
+    new Intl.DateTimeFormat("en-US", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone,
+      year: "numeric",
+    })
+      .formatToParts(instant)
+      .map((part) => [part.type, part.value]),
+  );
+  const year = parts.get("year");
+  const month = parts.get("month");
+  const day = parts.get("day");
+  if (!year || !month || !day) throw new Error(`Could not resolve calendar date in ${timeZone}.`);
+  return `${year}-${month}-${day}`;
+}
+
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
