@@ -6,6 +6,8 @@ node_modules
 .next
 .output
 .nitro
+.test-dist
+.script-dist
 dist
 .DS_Store
 *.tsbuildinfo

@@ -11,8 +11,10 @@
     "build:eve": "eve build",
     "dev": "next dev",
     "dev:eve": "eve dev",
+    "migrate:storage": "tsc -p tsconfig.scripts.json && node --env-file-if-exists=.env.local .script-dist/scripts/migrate-wc26-storage.js",
     "start": "next start",
     "start:eve": "eve start",
+    "test:unit": "tsc -p tsconfig.test.json && node --test '.test-dist/test/**/*.test.js'",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

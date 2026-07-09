@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "outDir": ".script-dist"
+  },
+  "include": ["agent/lib/**/*.ts", "scripts/**/*.ts"]
+}

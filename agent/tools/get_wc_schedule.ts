@@ -1,98 +1,86 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
+import {
+  fetchFixtureById,
+  fetchTournamentFixtures,
+  fixtureTimes,
+  FixtureIdSchema,
+  isIanaTimeZone,
+  type Fixture,
+} from "../lib/fixtures.js";
+import { resolveUserTimeZone } from "../lib/timezones.js";
 
-const TOURNAMENT_FINAL_DATE = "20260719";
+const TimeZoneSchema = z.string().min(1).refine(isIanaTimeZone, "Expected an IANA time zone such as America/Los_Angeles.");
 
-interface EspnCompetitor {
-  homeAway?: string;
-  score?: string;
-  winner?: boolean;
-  team?: { displayName?: string };
+const InputSchema = z.discriminatedUnion("view", [
+  z.object({ timeZone: TimeZoneSchema.optional(), view: z.literal("remaining") }),
+  z.object({ fixtureId: FixtureIdSchema, timeZone: TimeZoneSchema.optional(), view: z.literal("fixture") }),
+  z.object({ team: z.string().min(2), timeZone: TimeZoneSchema.optional(), view: z.literal("next_for_team") }),
+]);
+
+function fixtureView(fixture: Fixture, zone: ReturnType<typeof resolveUserTimeZone>) {
+  const times = fixtureTimes(fixture, zone?.timeZone ?? null);
+  const score = fixture.status.kind === "final"
+    ? `${fixture.home.name} ${fixture.status.homeGoals}–${fixture.status.awayGoals} ${fixture.away.name}`
+    : null;
+  return {
+    away: fixture.away,
+    fixtureId: fixture.id,
+    home: fixture.home,
+    kickoff: {
+      userLocal: times.userLocal ? { ...times.userLocal, source: zone?.source ?? null } : null,
+      utc: fixture.kickoffUtc,
+      venueLocal: times.venueLocal,
+    },
+    round: fixture.round,
+    score,
+    slot: fixture.slot,
+    status: fixture.status.kind,
+    venue: fixture.venue,
+  };
 }
 
-interface EspnEvent {
-  date: string;
-  season?: { slug?: string };
-  competitions?: {
-    status?: { type?: { state?: string; detail?: string } };
-    venue?: { fullName?: string; address?: { city?: string } };
-    competitors?: EspnCompetitor[];
-  }[];
-}
-
-// season.slug -> label used for slot names, matching ESPN's bracket
-// placeholders ("Quarterfinal 1 Winner" refers to slot "Quarterfinal 1").
-const ROUND_LABELS: Record<string, string> = {
-  "round-of-32": "Round of 32",
-  "round-of-16": "Round of 16",
-  quarterfinals: "Quarterfinal",
-  semifinals: "Semifinal",
-  "3rd-place-match": "Third place",
-  final: "Final",
-};
-
-function competitorName(competitor: EspnCompetitor | undefined): string {
-  return competitor?.team?.displayName ?? "TBD";
-}
-
-function competitorScore(competitor: EspnCompetitor | undefined): number | null {
-  const score = Number(competitor?.score);
-  return Number.isFinite(score) ? score : null;
+function teamMatches(fixture: Fixture, team: string): boolean {
+  const needle = team.trim().toLowerCase();
+  return [fixture.home, fixture.away].some(
+    (candidate) => candidate.id === team || candidate.name.toLowerCase().includes(needle),
+  );
 }
 
 export default defineTool({
   description:
-    "Remaining 2026 FIFA World Cup schedule, from today through the final on 2026-07-19. Returns every fixture with round, kickoff time (UTC), venue, and teams. Future rounds whose teams are not decided yet use bracket placeholders like 'Quarterfinal 1 Winner'; slot names ('Quarterfinal 1') are numbered by kickoff order within each round, so placeholders resolve to earlier fixtures in the list — use that to answer questions about potential matchups. Includes live/final scores for matches already underway.",
-  inputSchema: z.object({}),
-  async execute() {
+    "Current 2026 FIFA World Cup fixtures from ESPN, preserving stable fixture IDs. Always use this for 'what is next?', 'what should I watch?', today, or tomorrow. Use 'fixture' for an exact ID, 'next_for_team' to bridge from a team to its next match, and 'remaining' for the bracket. Times include venue-local and, when available, explicit/profile/browser/IP-derived user-local time.",
+  inputSchema: InputSchema,
+  async execute(input, ctx) {
     const asOf = new Date().toISOString();
-    const today = asOf.slice(0, 10).replaceAll("-", "");
+    const attributes = ctx.session.auth.current?.attributes ?? {};
+    const zone = resolveUserTimeZone({ attributes, explicit: input.timeZone });
 
-    if (today > TOURNAMENT_FINAL_DATE) {
-      return { asOf, matches: [], note: "The tournament ended on 2026-07-19." };
+    if (input.view === "fixture") {
+      try {
+        const fixture = await fetchFixtureById(input.fixtureId);
+        return { asOf, fixture: fixtureView(fixture, zone), source: "ESPN" };
+      } catch (error) {
+        return { error: String(error) };
+      }
     }
 
-    const res = await fetch(
-      `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${today}-${TOURNAMENT_FINAL_DATE}`,
-      { headers: { accept: "application/json" } },
-    );
-    if (!res.ok) return { error: `ESPN schedule API responded ${res.status}. Try again shortly.` };
-    const data = (await res.json()) as { events?: EspnEvent[] };
-
-    const slotCounts: Record<string, number> = {};
-    const matches = (data.events ?? [])
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map((event) => {
-        const competition = event.competitions?.[0];
-        const roundSlug = event.season?.slug ?? "unknown";
-        const label = ROUND_LABELS[roundSlug] ?? roundSlug;
-        const numbered = roundSlug === "quarterfinals" || roundSlug === "semifinals";
-        slotCounts[roundSlug] = (slotCounts[roundSlug] ?? 0) + 1;
-
-        const home = competition?.competitors?.find((c) => c.homeAway === "home");
-        const away = competition?.competitors?.find((c) => c.homeAway === "away");
-        const state = competition?.status?.type?.state ?? "pre";
-
-        return {
-          slot: numbered ? `${label} ${slotCounts[roundSlug]}` : label,
-          round: label,
-          kickoffUtc: event.date,
-          venue: competition?.venue?.fullName ?? null,
-          city: competition?.venue?.address?.city ?? null,
-          home: competitorName(home),
-          away: competitorName(away),
-          status:
-            state === "pre" ? "scheduled" : state === "in" ? "in play" : "full time",
-          ...(state !== "pre" && {
-            score: `${competitorName(home)} ${competitorScore(home) ?? "?"}–${competitorScore(away) ?? "?"} ${competitorName(away)}`,
-          }),
-        };
-      });
-
-    if (matches.length === 0) {
-      return { error: "ESPN returned no fixtures for the remaining tournament dates. Try again shortly." };
+    let fixtures;
+    try {
+      fixtures = await fetchTournamentFixtures();
+    } catch (error) {
+      return { error: String(error) };
     }
 
-    return { asOf, source: "ESPN", matches };
+    if (input.view === "next_for_team") {
+      const fixture = fixtures.find(
+        (candidate) => candidate.status.kind === "scheduled" && teamMatches(candidate, input.team),
+      );
+      return fixture
+        ? { asOf, fixture: fixtureView(fixture, zone), source: "ESPN" }
+        : { asOf, fixture: null, note: `${input.team} has no remaining scheduled fixture.`, source: "ESPN" };
+    }
+
+    return { asOf, matches: fixtures.map((fixture) => fixtureView(fixture, zone)), source: "ESPN" };
   },
 });

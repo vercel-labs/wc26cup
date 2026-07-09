@@ -18,14 +18,6 @@ export default defineTool({
   description:
     "Show an interactive match card in the web chat UI: round, kickoff, status, score, and both teams with flags. Use it whenever the conversation centers on one specific fixture from get_wc_schedule. The card is rendered by the UI — do not repeat its contents in your text reply.",
   inputSchema: z.object({
-    matchNumber: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe(
-        "Official FIFA match number (e.g. 97). Omit it unless a tool returned one — slot numbers like 'Quarterfinal 1' are NOT match numbers.",
-      ),
     round: z.string().min(1).max(24).describe("Short round label, e.g. 'Quarter', 'Semi', 'Final'"),
     kickoff: z
       .string()
@@ -37,7 +29,10 @@ export default defineTool({
     away: teamSchema,
   }),
   async execute(input) {
-    return input;
+    if (input.status !== "scheduled") return input;
+    const { score: _homeScore, ...home } = input.home;
+    const { score: _awayScore, ...away } = input.away;
+    return { ...input, home, away };
   },
   toModelOutput() {
     return {

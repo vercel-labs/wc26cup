@@ -41,7 +41,19 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
   if (!premium(message)) return;
   if (!(await allowed(state, message.author.userId))) return;
   await thread.startTyping();
-  await send(message.text, { thread });
+  await send(message.text, {
+    auth: {
+      attributes: {
+        thread_id: thread.id,
+        user_id: message.author.userId,
+        user_name: message.author.userName ?? message.author.fullName,
+      },
+      authenticator: "x-webhook",
+      principalId: message.author.userId,
+      principalType: "user",
+    },
+    thread,
+  });
 });
 
 export default channel;

@@ -1,0 +1,110 @@
+[
+  {
+    "claims": [
+      {
+        "key": "match:arg-egy:comeback",
+        "statement": "Argentina came back from 2-0 down to beat Egypt 3-2 and reach the quarterfinals."
+      },
+      {
+        "key": "match:arg-egy:late-three",
+        "statement": "Argentina scored three times in the final 11 minutes plus stoppage time."
+      },
+      {
+        "key": "match:arg-egy:winner",
+        "statement": "Enzo Fernandez completed the comeback with a header two minutes into stoppage time."
+      }
+    ],
+    "evidence": [
+      {
+        "excerpt": "Argentina staged a stunning comeback from 2-0 down to avoid a stunning exit at the hands of Egypt",
+        "publisher": "Asian Football Confederation",
+        "retrievedAt": "2026-07-09T19:48:46Z",
+        "supports": ["match:arg-egy:comeback"],
+        "title": "R16: Argentina 3-2 Egypt",
+        "url": "https://www.the-afc.com/en/national/fifa_world_cup.html/news/r16-argentina-3-2-egypt"
+      },
+      {
+        "excerpt": "with a 3-2 win to reach the quarter-finals on Monday",
+        "publisher": "Asian Football Confederation",
+        "retrievedAt": "2026-07-09T19:48:46Z",
+        "supports": ["match:arg-egy:comeback"],
+        "title": "R16: Argentina 3-2 Egypt",
+        "url": "https://www.the-afc.com/en/national/fifa_world_cup.html/news/r16-argentina-3-2-egypt"
+      },
+      {
+        "excerpt": "Argentina struck three times in the final 11 minutes plus stoppage time.",
+        "publisher": "Asian Football Confederation",
+        "retrievedAt": "2026-07-09T19:48:46Z",
+        "supports": ["match:arg-egy:late-three"],
+        "title": "R16: Argentina 3-2 Egypt",
+        "url": "https://www.the-afc.com/en/national/fifa_world_cup.html/news/r16-argentina-3-2-egypt"
+      },
+      {
+        "excerpt": "Enzo Fernandez completed the turnaround with a superb header two minutes into stoppage time.",
+        "publisher": "Asian Football Confederation",
+        "retrievedAt": "2026-07-09T19:48:46Z",
+        "supports": ["match:arg-egy:winner"],
+        "title": "R16: Argentina 3-2 Egypt",
+        "url": "https://www.the-afc.com/en/national/fifa_world_cup.html/news/r16-argentina-3-2-egypt"
+      }
+    ],
+    "fixtureId": "760509",
+    "rarity": { "kind": "none" },
+    "teams": ["Argentina", "Egypt"],
+    "topic": "Argentina's final-11-minute comeback"
+  },
+  {
+    "claims": [
+      {
+        "key": "goal:haaland:79",
+        "statement": "Erling Haaland scored against Brazil in the 79th minute."
+      },
+      {
+        "key": "goal:haaland:90",
+        "statement": "Haaland scored again in the 90th minute."
+      },
+      {
+        "key": "match:bra-nor:first-quarterfinal",
+        "statement": "Norway's 2-1 win sent them to their first FIFA World Cup quarterfinal."
+      }
+    ],
+    "evidence": [
+      {
+        "excerpt": "79' HAALAND Erling [9] SCHJELDERUP Andreas [21]",
+        "publisher": "FIFA",
+        "retrievedAt": "2026-07-09T19:48:46Z",
+        "supports": ["goal:haaland:79"],
+        "title": "Brazil v Norway Full Time Match Report",
+        "url": "https://fdp.fifa.org/assetspublic/ce281/r12541/pdf/FullTimeMatchReport-English.pdf"
+      },
+      {
+        "excerpt": "90' HAALAND Erling [9] SCHJELDERUP Andreas [21]",
+        "publisher": "FIFA",
+        "retrievedAt": "2026-07-09T19:48:46Z",
+        "supports": ["goal:haaland:90"],
+        "title": "Brazil v Norway Full Time Match Report",
+        "url": "https://fdp.fifa.org/assetspublic/ce281/r12541/pdf/FullTimeMatchReport-English.pdf"
+      },
+      {
+        "excerpt": "Erling Haaland scored two late goals to send Norway through to a first FIFA World Cup quarter-final",
+        "publisher": "Asian Football Confederation",
+        "retrievedAt": "2026-07-09T19:48:46Z",
+        "supports": ["match:bra-nor:first-quarterfinal"],
+        "title": "R16: Brazil 1-2 Norway",
+        "url": "https://www.the-afc.com/en/national/fifa_world_cup.html/news/r16-brazil-1-2-norway"
+      },
+      {
+        "excerpt": "with a stunning 2-1 win over Brazil",
+        "publisher": "Asian Football Confederation",
+        "retrievedAt": "2026-07-09T19:48:46Z",
+        "supports": ["match:bra-nor:first-quarterfinal"],
+        "title": "R16: Brazil 1-2 Norway",
+        "url": "https://www.the-afc.com/en/national/fifa_world_cup.html/news/r16-brazil-1-2-norway"
+      }
+    ],
+    "fixtureId": "760504",
+    "rarity": { "kind": "none" },
+    "teams": ["Brazil", "Norway"],
+    "topic": "Haaland's late brace against Brazil"
+  }
+]

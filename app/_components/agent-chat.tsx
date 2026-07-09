@@ -20,8 +20,13 @@ const AGENT_NAME = "wc26bot";
 
 type AgentStatus = ReturnType<typeof useEveAgent>["status"];
 
+function browserHeaders(): Record<string, string> {
+  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return timeZone ? { "x-wc26-time-zone": timeZone } : {};
+}
+
 export function AgentChat() {
-  const agent = useEveAgent();
+  const agent = useEveAgent({ headers: browserHeaders });
   const isBusy = agent.status === "submitted" || agent.status === "streaming";
   const isEmpty = agent.data.messages.length === 0;
 

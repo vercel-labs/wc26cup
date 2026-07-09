@@ -16,11 +16,21 @@ a single headline sentence; the component carries the details.
 \`get_wc_odds\` first just to feed it; its result gives you the headline
 numbers for your one-sentence reply.`;
 
+const X_SURFACE = `# Surface: X
+You are replying in one public X thread. Text only, under 280 characters. Never
+call a visual renderer. An exact-score prediction can be followed up in this
+same thread because the verified thread target is stored with the prediction.`;
+
 export default defineDynamic({
   events: {
     "session.started": (_event, ctx) => {
-      const isSlack = ctx.session.auth.initiator?.authenticator === "slack-webhook";
-      return defineInstructions({ markdown: isSlack ? SLACK_SURFACE : WEB_SURFACE });
+      const authenticator = ctx.session.auth.initiator?.authenticator;
+      const markdown = authenticator === "slack-webhook"
+        ? SLACK_SURFACE
+        : authenticator === "x-webhook"
+          ? X_SURFACE
+          : WEB_SURFACE;
+      return defineInstructions({ markdown });
     },
   },
 });

@@ -1,43 +1,77 @@
+import type { PredictionFollowUp, PredictionOwner } from "./bets.js";
+
 interface AuthLike {
-  authenticator?: string;
-  principalId?: string;
-  attributes?: Record<string, unknown>;
+  readonly attributes?: Readonly<Record<string, unknown>>;
+  readonly authenticator?: string;
+  readonly principalId?: string;
 }
 
-export interface BetIdentity {
-  principalId: string;
-  displayName: string | null;
-  /** Present only for Slack sessions — enables the settlement announcement. */
-  slack: { userId: string; channelId: string } | null;
-  /** How to address the user in a reply: Slack mention when possible, else a name or "you". */
-  mention: string;
+export interface PredictionIdentity {
+  readonly followUp: PredictionFollowUp;
+  readonly mention: string;
+  readonly owner: PredictionOwner;
 }
 
-function str(value: unknown): string | null {
+function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-/**
- * Bet identity from any principal-based auth context. Slack contributes an
- * announcement target on top; every other authenticator (Vercel OIDC, custom)
- * works as long as a principalId is present.
- */
-export function betIdentity(auth: AuthLike | null | undefined): BetIdentity | null {
-  const principalId = str(auth?.principalId);
-  if (!auth || !principalId) return null;
-
+export function predictionIdentity(
+  auth: AuthLike | null | undefined,
+  sessionId: string | undefined,
+): PredictionIdentity | null {
+  if (!auth) return null;
   const attributes = auth.attributes ?? {};
   const displayName =
-    str(attributes.user_name) ?? str(attributes.full_name) ?? str(attributes.name) ?? str(attributes.email);
+    stringValue(attributes.user_name) ??
+    stringValue(attributes.full_name) ??
+    stringValue(attributes.name) ??
+    stringValue(attributes.email);
 
-  const slackUserId = auth.authenticator === "slack-webhook" ? str(attributes.user_id) : null;
-  const slackChannelId = auth.authenticator === "slack-webhook" ? str(attributes.channel_id) : null;
-  const slack = slackUserId && slackChannelId ? { userId: slackUserId, channelId: slackChannelId } : null;
+  if (auth.authenticator === "none") {
+    if (!sessionId) return null;
+    return {
+      followUp: { kind: "pull_only", surface: "web" },
+      mention: "you",
+      owner: { kind: "web_session", sessionId },
+    };
+  }
+
+  const principalId = stringValue(auth.principalId);
+  if (!principalId) return null;
+
+  if (auth.authenticator === "slack-webhook") {
+    const userId = stringValue(attributes.user_id);
+    const channelId = stringValue(attributes.channel_id);
+    if (!userId || !channelId) return null;
+    return {
+      followUp: { channelId, kind: "slack", userId },
+      mention: `<@${userId}>`,
+      owner: { displayName, kind: "principal", principalId },
+    };
+  }
+
+  if (auth.authenticator === "x-webhook") {
+    const userId = stringValue(attributes.user_id);
+    const threadId = stringValue(attributes.thread_id);
+    if (!userId || !threadId) return null;
+    return {
+      followUp: { kind: "x", threadId, userId },
+      mention: displayName ? `@${displayName.replace(/^@/u, "")}` : "you",
+      owner: { displayName, kind: "principal", principalId },
+    };
+  }
 
   return {
-    principalId,
-    displayName,
-    slack,
-    mention: slack ? `<@${slack.userId}>` : (displayName ?? "you"),
+    followUp: { kind: "pull_only", surface: "web" },
+    mention: displayName ?? "you",
+    owner: { displayName, kind: "principal", principalId },
   };
+}
+
+export function samePredictionOwner(left: PredictionOwner, right: PredictionOwner): boolean {
+  if (left.kind !== right.kind) return false;
+  return left.kind === "principal"
+    ? right.kind === "principal" && left.principalId === right.principalId
+    : right.kind === "web_session" && left.sessionId === right.sessionId;
 }

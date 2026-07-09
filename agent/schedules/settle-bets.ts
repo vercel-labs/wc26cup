@@ -1,101 +1,139 @@
-import { defineSchedule } from "eve/schedules";
-import { type BetRecord, listPendingBets, saveBet } from "../lib/bets.js";
+import { defineSchedule, type ScheduleHandlerArgs } from "eve/schedules";
 import slack from "../channels/slack.js";
+import x from "../channels/x.js";
+import {
+  listBets,
+  listPredictions,
+  markPredictionNotified,
+  saveBet,
+  settleExactScore,
+  writePredictionTerminal,
+  type BetRecord,
+  type PredictionView,
+} from "../lib/bets.js";
+import { fetchFixtureById, fetchFixturesForRange, type Fixture } from "../lib/fixtures.js";
 
-interface EspnCompetitor {
-  winner?: boolean;
-  score?: string;
-  team?: { displayName?: string };
-}
-
-interface EspnEvent {
-  competitions?: {
-    status?: { type?: { state?: string } };
-    competitors?: EspnCompetitor[];
-  }[];
-}
-
-function sameTeam(a: string | undefined, b: string): boolean {
-  if (!a) return false;
-  const left = a.toLowerCase();
-  const right = b.toLowerCase();
-  return left.includes(right) || right.includes(left);
-}
-
-/** YYYYMMDD for `date` shifted by `days`, computed in UTC. */
-function shiftedUtcDate(date: string, days: number): string {
+function compactDate(date: string, shiftDays: number): string {
   const shifted = new Date(`${date}T00:00:00Z`);
-  shifted.setUTCDate(shifted.getUTCDate() + days);
+  shifted.setUTCDate(shifted.getUTCDate() + shiftDays);
   return shifted.toISOString().slice(0, 10).replaceAll("-", "");
 }
 
-/**
- * Final-whistle outcome for a bet, or null while the match is not finished.
- *
- * Timezones: bet.fixtureDate is the UTC date of kickoff, but ESPN's `dates=`
- * filter buckets events by US Eastern date, so a late UTC kickoff can land in
- * the previous day's bucket. Querying fixtureDate ± 1 day and matching by team
- * pair makes the bucketing irrelevant.
- *
- * Settlement is outcome-only (win/lose, penalties count via ESPN's `winner`
- * flag). The sweep never voids a bet — calling a bet off is the user's move,
- * through cancel_bet.
- */
-async function settleAgainstEspn(bet: BetRecord): Promise<{ status: "won" | "lost"; score: string } | null> {
-  const res = await fetch(
-    `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${shiftedUtcDate(bet.fixtureDate, -1)}-${shiftedUtcDate(bet.fixtureDate, 1)}`,
-    { headers: { accept: "application/json" } },
+function sameTeam(left: string, right: string): boolean {
+  const a = left.toLowerCase();
+  const b = right.toLowerCase();
+  return a.includes(b) || b.includes(a);
+}
+
+async function settleLegacyBet(bet: BetRecord): Promise<BetRecord | null> {
+  const fixtures = await fetchFixturesForRange(compactDate(bet.fixtureDate, -1), compactDate(bet.fixtureDate, 1));
+  const fixture = fixtures.find(
+    (candidate) =>
+      [candidate.home.name, candidate.away.name].some((team) => sameTeam(team, bet.team)) &&
+      [candidate.home.name, candidate.away.name].some((team) => sameTeam(team, bet.opponent)),
   );
-  if (!res.ok) return null;
-  const data = (await res.json()) as { events?: EspnEvent[] };
+  if (!fixture || fixture.status.kind !== "final") return null;
+  const backedIsHome = sameTeam(fixture.home.name, bet.team);
+  const backedGoals = backedIsHome ? fixture.status.homeGoals : fixture.status.awayGoals;
+  const opposingGoals = backedIsHome ? fixture.status.awayGoals : fixture.status.homeGoals;
+  if (backedGoals === opposingGoals) return null;
+  return { ...bet, status: backedGoals > opposingGoals ? "won" : "lost" };
+}
 
-  for (const event of data.events ?? []) {
-    const competition = event.competitions?.[0];
-    const competitors = competition?.competitors ?? [];
-    const backed = competitors.find((c) => sameTeam(c.team?.displayName, bet.team));
-    const opponent = competitors.find((c) => sameTeam(c.team?.displayName, bet.opponent));
-    if (!backed || !opponent) continue;
-    if (competition?.status?.type?.state !== "post") return null;
+async function settlePendingPredictions(now: Date): Promise<void> {
+  const pending = (await listPredictions()).filter((prediction) => prediction.terminal === null);
+  for (const prediction of pending) {
+    let fixture: Fixture;
+    try {
+      fixture = await fetchFixtureById(prediction.placed.fixture.id);
+    } catch (error) {
+      console.error(`[bets] failed to fetch fixture ${prediction.placed.fixture.id}`, error);
+      continue;
+    }
 
-    const score = `${backed.team?.displayName} ${backed.score ?? "?"}–${opponent.score ?? "?"} ${opponent.team?.displayName}`;
-    if (backed.winner === true) return { status: "won", score };
-    if (opponent.winner === true) return { status: "lost", score };
-    return null; // finished but no winner flagged — leave pending, never auto-void
+    if (fixture.status.kind === "cancelled") {
+      await writePredictionTerminal(prediction.placed.id, {
+        at: now.toISOString(),
+        kind: "void",
+        reason: "fixture_cancelled",
+        schemaVersion: 2,
+      });
+      continue;
+    }
+    if (fixture.status.kind !== "final") continue;
+    const actual = { awayGoals: fixture.status.awayGoals, homeGoals: fixture.status.homeGoals };
+    await writePredictionTerminal(prediction.placed.id, {
+      actual,
+      at: now.toISOString(),
+      kind: "settled",
+      result: settleExactScore({ actual, prediction: prediction.placed.prediction }),
+      schemaVersion: 2,
+    });
   }
-  return null;
+}
+
+function resultMessage(prediction: PredictionView): string {
+  const terminal = prediction.terminal;
+  if (!terminal || terminal.kind !== "settled") throw new Error("Prediction is not settled.");
+  const fixture = prediction.placed.fixture;
+  return [
+    `${fixture.home.name} ${terminal.actual.homeGoals}–${terminal.actual.awayGoals} ${fixture.away.name}.`,
+    `The prediction was ${fixture.home.name} ${prediction.placed.prediction.homeGoals}–${prediction.placed.prediction.awayGoals} ${fixture.away.name}.`,
+    terminal.result === "hit" ? "Exact hit." : "Miss.",
+  ].join(" ");
+}
+
+async function sendPendingNotifications(input: {
+  readonly appAuth: ScheduleHandlerArgs["appAuth"];
+  readonly receive: ScheduleHandlerArgs["receive"];
+}): Promise<void> {
+  const settled = (await listPredictions()).filter(
+    (prediction) => prediction.terminal?.kind === "settled" && !prediction.notified,
+  );
+  for (const prediction of settled) {
+    const followUp = prediction.placed.followUp;
+    if (followUp.kind === "pull_only") continue;
+    const message = resultMessage(prediction);
+    if (followUp.kind === "slack") {
+      await input.receive(slack, {
+        auth: input.appAuth,
+        message: `Follow up on a fictitious exact-score prediction. Mention <@${followUp.userId}>. ${message} Keep it warm and brief; no money was involved.`,
+        target: { channelId: followUp.channelId },
+      });
+    } else {
+      await input.receive(x, {
+        auth: input.appAuth,
+        message: `Reply in this public X thread with the fictitious score-prediction result. ${message} Stay under 280 characters and do not imply money was involved.`,
+        target: { adapterName: "x", threadId: followUp.threadId },
+      });
+    }
+    await markPredictionNotified(prediction.placed.id);
+  }
+}
+
+export async function settleBets(input: {
+  readonly appAuth: ScheduleHandlerArgs["appAuth"];
+  readonly now?: Date;
+  readonly receive: ScheduleHandlerArgs["receive"];
+}): Promise<void> {
+  const now = input.now ?? new Date();
+  await settlePendingPredictions(now);
+  await sendPendingNotifications(input);
+
+  const legacyPending = (await listBets()).filter((bet) => bet.status === "pending");
+  for (const bet of legacyPending) {
+    try {
+      const settled = await settleLegacyBet(bet);
+      if (settled) await saveBet(settled);
+    } catch (error) {
+      console.error(`[bets] failed to settle legacy bet ${bet.id}`, error);
+    }
+  }
 }
 
 export default defineSchedule({
-  // Every 5 minutes. Vercel evaluates cron in UTC, which a */5 step makes
-  // irrelevant — the point is that a bet settles within ~5 minutes of the
-  // final whistle, whatever wall clock the match ends on.
   cron: "*/5 * * * *",
-  async run({ receive, waitUntil, appAuth }) {
-    waitUntil(
-      (async () => {
-        const pending = await listPendingBets();
-        for (const bet of pending) {
-          const outcome = await settleAgainstEspn(bet);
-          if (!outcome) continue;
-
-          await saveBet({ ...bet, status: outcome.status });
-
-          // Bets from surfaces without a channel (e.g. web chat) settle
-          // silently in the ledger; the user asks the bot for the outcome.
-          if (!bet.slack) continue;
-
-          await receive(slack, {
-            message:
-              `Settle a fictitious bet (no money involved). <@${bet.slack.userId}> bet that ` +
-              `${bet.team} would beat ${bet.opponent} (${bet.round}, ${bet.fixtureDate} UTC). ` +
-              `Final: ${outcome.score}. They ${outcome.status.toUpperCase()}. ` +
-              `Announce the result in the channel in your usual voice, mentioning them as <@${bet.slack.userId}> — ` +
-              `congratulate a win (and hint at the promised gift), console a loss with one gentle tease.`,
-            target: { channelId: bet.slack.channelId },
-            auth: appAuth,
-          });
-        }
-      })(),
-    );
+  run({ receive, waitUntil, appAuth }) {
+    waitUntil(settleBets({ appAuth, receive }));
   },
 });
