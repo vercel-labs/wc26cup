@@ -1,25 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { Flag } from "@/app/_components/flag";
 import { cn } from "@/lib/utils";
 
-interface BetOption {
+interface ScoreOption {
   readonly id: string;
   readonly label: string;
   readonly description?: string;
 }
 
-const FLAG_CODE = /^[a-z]{2}(-[a-z]{2,3})?$/;
+const SCORELINE = /^\d{1,2}-\d{1,2}$/;
 
-export function isBetQuestion(options: readonly BetOption[] | undefined): options is readonly BetOption[] {
+export function isScorePick(options: readonly ScoreOption[] | undefined): options is readonly ScoreOption[] {
   return (
     Array.isArray(options) &&
-    options.length === 2 &&
+    options.length >= 2 &&
     options.every(
       (option) =>
         typeof option.id === "string" &&
-        FLAG_CODE.test(option.id) &&
+        SCORELINE.test(option.id) &&
         typeof option.label === "string",
     )
   );
@@ -32,7 +31,7 @@ export function BetCard({
   responded,
 }: {
   readonly onPick: (optionId: string) => void;
-  readonly options: readonly BetOption[];
+  readonly options: readonly ScoreOption[];
   readonly prompt: string;
   readonly responded?: string;
 }) {
@@ -50,17 +49,17 @@ export function BetCard({
       <p className="text-sm">{prompt}</p>
       <p className="mt-1 text-muted-foreground text-xs">
         {picked
-          ? "bet locked · bragging rights only"
-          : "tap your pick · fictitious, bragging rights only"}
+          ? "prediction locked · bragging rights only"
+          : "tap your exact score · fictitious, bragging rights only"}
       </p>
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="mt-4 grid grid-cols-3 gap-2">
         {options.map((option) => {
           const isPicked = picked === option.id;
           const dimmed = picked !== null && !isPicked;
           return (
             <button
               className={cn(
-                "flex flex-col items-center gap-1.5 rounded-xl border p-4 transition-colors",
+                "flex flex-col items-center gap-0.5 rounded-xl border p-3 transition-colors",
                 isPicked
                   ? "border-emerald-500 bg-emerald-500/10"
                   : "hover:border-foreground/30 hover:bg-accent",
@@ -71,14 +70,12 @@ export function BetCard({
               onClick={() => handlePick(option.id)}
               type="button"
             >
-              <Flag code={option.id} width={44} />
-              <span className="mt-1 font-semibold text-base text-foreground">{option.label}</span>
+              <span className="font-semibold text-base text-foreground tabular-nums">{option.id}</span>
               {option.description ? (
-                <span className="text-muted-foreground text-xs tabular-nums">
+                <span className="text-center text-[11px] text-muted-foreground leading-tight">
                   {option.description}
                 </span>
               ) : null}
-              {isPicked ? <span className="font-medium text-emerald-500 text-xs">your pick</span> : null}
             </button>
           );
         })}

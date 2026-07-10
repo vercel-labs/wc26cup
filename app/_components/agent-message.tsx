@@ -7,7 +7,7 @@ import type {
   EveMessagePart,
 } from "eve/react";
 import { CheckCircleIcon, ExternalLinkIcon, KeyRoundIcon, XCircleIcon } from "lucide-react";
-import { BetCard, isBetQuestion } from "@/app/_components/bet-card";
+import { BetCard, isScorePick } from "@/app/_components/bet-card";
 import { BracketCard, isBracketData } from "@/app/_components/bracket-card";
 import { isLeaderboardData, LeaderboardCard } from "@/app/_components/leaderboard-card";
 import { isMatchCardData, MatchCard } from "@/app/_components/match-card";
@@ -108,7 +108,7 @@ function AgentMessagePart({
       return <AuthorizationPrompt part={part} />;
     case "dynamic-tool": {
       const inputRequest = part.toolMetadata?.eve?.inputRequest;
-      if (part.toolName === "ask_question" && inputRequest && isBetQuestion(inputRequest.options)) {
+      if (part.toolName === "ask_question" && inputRequest && isScorePick(inputRequest.options)) {
         return (
           <BetCard
             onPick={(optionId) =>
