@@ -41,6 +41,14 @@ const InputSchema = z.discriminatedUnion("view", [
   }),
 ]);
 
+const FlatInputSchema = z.object({
+  view: z.enum(["winner", "search", "match"]),
+  limit: z.number().int().min(1).max(20).optional(),
+  query: z.string().min(2).optional(),
+  contractKind: z.enum(["advance", "regulation_time"]).optional(),
+  fixtureId: FixtureIdSchema.optional(),
+});
+
 async function fetchUnknown(url: string): Promise<unknown> {
   const response = await fetch(url, { headers: { accept: "application/json" } });
   if (!response.ok) throw new Error(`${url} responded ${response.status}.`);
@@ -108,8 +116,13 @@ async function searchPolymarket(query: string, limit: number) {
 export default defineTool({
   description:
     "Fresh World Cup 2026 prediction-market prices. 'match' fetches Polymarket and Kalshi for one stable fixture ID and one settlement contract. Use 'advance' for a knockout winner including extra time/penalties; use 'regulation_time' for 90-minute home/draw/away. 'winner' is tournament champion only. Never compare unlike contract kinds.",
-  inputSchema: InputSchema,
-  async execute(input) {
+  inputSchema: FlatInputSchema,
+  async execute(rawInput) {
+    const parsed = InputSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0]?.message ?? "Invalid get_wc_odds input." };
+    }
+    const input = parsed.data;
     if (input.view === "match") {
       try {
         const fixture = await fetchFixtureById(input.fixtureId);

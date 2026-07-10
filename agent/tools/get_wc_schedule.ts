@@ -20,6 +20,13 @@ const InputSchema = z.discriminatedUnion("view", [
   z.object({ team: z.string().min(2), timeZone: TimeZoneSchema.optional(), view: z.literal("next_for_team") }),
 ]);
 
+const FlatInputSchema = z.object({
+  view: z.enum(["today", "remaining", "fixture", "next_for_team"]),
+  timeZone: TimeZoneSchema.optional(),
+  fixtureId: FixtureIdSchema.optional(),
+  team: z.string().min(2).optional(),
+});
+
 function fixtureView(fixture: Fixture, zone: ReturnType<typeof resolveUserTimeZone>) {
   const times = fixtureTimes(fixture, zone?.timeZone ?? null);
   const score = fixture.status.kind === "final"
@@ -58,8 +65,13 @@ function shiftedUtcDate(value: Date, days: number): string {
 export default defineTool({
   description:
     "Current 2026 FIFA World Cup fixtures from ESPN, preserving stable fixture IDs. Use 'today' for the user's current tournament day, 'fixture' for an exact ID, 'next_for_team' only when they ask what is next for a team, and 'remaining' for the future bracket. Times include venue-local and, when available, explicit/profile/browser/IP-derived user-local time.",
-  inputSchema: InputSchema,
-  async execute(input, ctx) {
+  inputSchema: FlatInputSchema,
+  async execute(rawInput, ctx) {
+    const parsed = InputSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0]?.message ?? "Invalid get_wc_schedule input." };
+    }
+    const input = parsed.data;
     const asOf = new Date().toISOString();
     const attributes = ctx.session.auth.current?.attributes ?? {};
     const zone = resolveUserTimeZone({ attributes, explicit: input.timeZone });
