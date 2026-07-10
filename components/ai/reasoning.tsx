@@ -127,7 +127,7 @@ export const Reasoning = memo(
     return (
       <ReasoningContext.Provider value={contextValue}>
         <Collapsible
-          className={cn("not-prose mb-4 w-full", className)}
+          className={cn("not-prose w-full", className)}
           onOpenChange={handleOpenChange}
           open={isOpen}
           {...props}
@@ -206,3 +206,30 @@ export const ReasoningContent = memo(({ className, children, ...props }: Reasoni
 Reasoning.displayName = "Reasoning";
 ReasoningTrigger.displayName = "ReasoningTrigger";
 ReasoningContent.displayName = "ReasoningContent";
+
+export function ReasoningStatus({ isStreaming }: { readonly isStreaming: boolean }) {
+  const [duration, setDuration] = useState<number | undefined>(undefined);
+  const startRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isStreaming) {
+      if (startRef.current === null) {
+        startRef.current = Date.now();
+      }
+    } else if (startRef.current !== null) {
+      setDuration(Math.max(1, Math.ceil((Date.now() - startRef.current) / MS_IN_S)));
+      startRef.current = null;
+    }
+  }, [isStreaming]);
+
+  return (
+    <div className="flex items-center gap-2 text-muted-foreground text-sm">
+      <BrainIcon aria-hidden className="size-4" />
+      {isStreaming ? (
+        <Shimmer duration={1}>Thinking...</Shimmer>
+      ) : (
+        <span>{duration ? `Thought for ${duration} seconds` : "Thought for a few seconds"}</span>
+      )}
+    </div>
+  );
+}
