@@ -62,21 +62,109 @@ export function AgentMessage({
     );
   }
 
+  const segments = buildSegments(message.parts);
+
   return (
     <Message align="start" className={message.metadata?.optimistic ? "opacity-70" : undefined}>
       <MessageContent>
-        {message.parts.map((part, index) => (
-          <AgentMessagePart
-            canRespond={canRespond}
-            key={partKey(part, index)}
-            onInputResponses={onInputResponses}
-            part={part}
-            showCaret={isStreaming && index === lastTextIndex}
-            streaming={isStreaming}
-          />
-        ))}
+        {segments.map((segment) =>
+          segment.kind === "steps" ? (
+            <StepGroup items={segment.items} key={`steps:${segment.items[0].index}`} streaming={isStreaming} />
+          ) : (
+            <AgentMessagePart
+              canRespond={canRespond}
+              key={partKey(segment.part, segment.index)}
+              onInputResponses={onInputResponses}
+              part={segment.part}
+              showCaret={isStreaming && segment.index === lastTextIndex}
+              streaming={isStreaming}
+            />
+          ),
+        )}
       </MessageContent>
     </Message>
+  );
+}
+
+type StepItem = { readonly index: number; readonly part: EveMessagePart };
+type Segment =
+  | { readonly kind: "steps"; readonly items: StepItem[] }
+  | { readonly index: number; readonly kind: "part"; readonly part: EveMessagePart };
+
+function isGroupableStep(part: EveMessagePart): boolean {
+  if (part.type === "reasoning") return true;
+  if (part.type !== "dynamic-tool") return false;
+  return part.toolName !== "ask_question" && !CARD_TOOLS.has(part.toolName);
+}
+
+function buildSegments(parts: readonly EveMessagePart[]): Segment[] {
+  const segments: Segment[] = [];
+  let run: StepItem[] = [];
+  const flush = () => {
+    if (run.length === 0) return;
+    if (run.some((item) => item.part.type === "dynamic-tool")) {
+      segments.push({ items: run, kind: "steps" });
+    } else {
+      for (const item of run) segments.push({ index: item.index, kind: "part", part: item.part });
+    }
+    run = [];
+  };
+  parts.forEach((part, index) => {
+    if (part.type === "step-start") return;
+    if (isGroupableStep(part)) {
+      run.push({ index, part });
+      return;
+    }
+    flush();
+    segments.push({ index, kind: "part", part });
+  });
+  flush();
+  return segments;
+}
+
+function StepGroup({
+  items,
+  streaming,
+}: {
+  readonly items: readonly StepItem[];
+  readonly streaming: boolean;
+}) {
+  return (
+    <div className="w-full divide-y overflow-hidden rounded-2xl border bg-card/40">
+      {items.map(({ index, part }) => {
+        if (part.type === "reasoning") {
+          return (
+            <div className="px-3 py-2" key={`reasoning:${index}`}>
+              <ReasoningStatus isStreaming={streaming && part.state === "streaming"} />
+            </div>
+          );
+        }
+        if (part.type === "dynamic-tool") {
+          return <ToolStep key={part.toolCallId} part={part} />;
+        }
+        return null;
+      })}
+    </div>
+  );
+}
+
+function ToolStep({ part }: { readonly part: EveDynamicToolPart }) {
+  const showContent = hasInput(part.input) || part.output !== undefined || Boolean(part.errorText);
+  return (
+    <Tool className="rounded-none border-0">
+      <ToolHeader
+        state={part.state}
+        title={part.toolName}
+        toolName={part.toolName}
+        type="dynamic-tool"
+      />
+      {showContent ? (
+        <ToolContent>
+          {hasInput(part.input) ? <ToolInput input={part.input} /> : null}
+          <ToolOutput errorText={part.errorText} output={part.output} />
+        </ToolContent>
+      ) : null}
+    </Tool>
   );
 }
 
