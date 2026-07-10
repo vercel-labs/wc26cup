@@ -223,8 +223,8 @@ export function ReasoningStatus({ isStreaming }: { readonly isStreaming: boolean
   }, [isStreaming]);
 
   return (
-    <div className="flex items-center gap-2 text-muted-foreground text-sm">
-      <BrainIcon aria-hidden className="size-4" />
+    <div className="flex items-center gap-1.5 text-muted-foreground text-xs">
+      <BrainIcon aria-hidden className="size-3.5" />
       {isStreaming ? (
         <Shimmer duration={1}>Thinking...</Shimmer>
       ) : (
