@@ -37,18 +37,18 @@ export function Composer({
 
   return (
     <div className="w-full">
-      {status ? (
-        <div className="relative z-10 -mb-px ml-3.5 inline-flex w-fit items-center gap-1.5 rounded-t-lg border border-b-0 bg-input/30 px-3 py-1.5 backdrop-blur-sm">
-          <StatusDot status={status} />
-        </div>
-      ) : null}
       <form
         onSubmit={(event) => {
           event.preventDefault();
           submit();
         }}
       >
-        <div className="rounded-lg border bg-input/30 shadow-sm backdrop-blur-sm transition-colors focus-within:border-ring">
+        <div className="relative rounded-lg border bg-input/30 shadow-sm backdrop-blur-sm transition-colors focus-within:border-ring">
+          {status ? (
+            <div className="-top-3 absolute left-4 z-10 flex size-5 items-center justify-center rounded-full border bg-[color-mix(in_oklab,var(--input)_30%,var(--background))]">
+              <StatusDot status={status} />
+            </div>
+          ) : null}
           <textarea
             className="field-sizing-content max-h-44 min-h-11 w-full resize-none border-0 bg-transparent px-3.5 pt-3.5 text-foreground text-sm leading-6 outline-none placeholder:text-muted-foreground"
             onChange={(event) => setText(event.target.value)}
