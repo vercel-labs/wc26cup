@@ -80,20 +80,20 @@ function ChanceCell({ cell }: { readonly cell: Cell }) {
 
 export function RoundChances({ data }: { readonly data: RoundChancesData }) {
   return (
-    <div className="w-full max-w-2xl overflow-hidden rounded-xl border bg-card">
-      <div className="flex items-baseline justify-between gap-4 border-b px-4 py-3">
+    <div className="flex max-h-[70vh] w-full max-w-2xl shrink-0 flex-col overflow-hidden rounded-xl border bg-card">
+      <div className="flex shrink-0 items-baseline justify-between gap-4 border-b px-4 py-3">
         <span className="font-medium text-foreground text-sm">{data.title}</span>
         {data.subtitle ? (
           <span className="text-muted-foreground text-sm">{data.subtitle}</span>
         ) : null}
       </div>
-      <div className="overflow-x-auto p-3">
+      <div className="min-h-0 flex-1 overflow-auto p-3">
         <table className="w-full border-separate border-spacing-x-1 border-spacing-y-1">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="text-left text-muted-foreground text-xs tracking-wider">
-              <th className="min-w-32 px-1 pb-1 font-medium">TEAM</th>
+              <th className="min-w-32 bg-card px-1 pb-1 font-medium">TEAM</th>
               {ROUNDS.map((round) => (
-                <th className="w-14 pb-1 text-center font-medium" key={round.key}>
+                <th className="w-14 bg-card pb-1 text-center font-medium" key={round.key}>
                   {round.label}
                 </th>
               ))}
