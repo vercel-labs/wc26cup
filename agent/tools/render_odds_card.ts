@@ -38,7 +38,6 @@ function loadFlagDataUri(code: string): Promise<string> {
   return cached;
 }
 
-/** Satori element helper — plain object tree, no JSX. */
 function el(type: string, style: Record<string, unknown>, children?: unknown, extra?: Record<string, unknown>) {
   return { type, props: { style, children, ...extra } };
 }

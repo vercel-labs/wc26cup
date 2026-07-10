@@ -1,8 +1,6 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
-// Polymarket's reach-round ladder. There is no reach-round-of-32 event; R32 is
-// derived: settled R16 implies the team already came through R32.
 const LADDER = [
   { key: "r16", slug: "world-cup-nation-to-reach-round-of-16" },
   { key: "qf", slug: "world-cup-nation-to-reach-quarterfinals" },
@@ -13,13 +11,10 @@ const LADDER = [
 
 type LadderKey = (typeof LADDER)[number]["key"];
 
-// A market priced at effectively 1 means the round was already reached.
 const SETTLED_PCT = 99.5;
 
-/** "in" = reached, number = implied probability %, null = no market data. */
 type Cell = "in" | number | null;
 
-// The 48 qualified nations as Polymarket names them -> flagcdn codes.
 const FLAGS: Record<string, string> = {
   Algeria: "dz",
   Argentina: "ar",

@@ -2,32 +2,12 @@ import { del, list, put } from "@vercel/blob";
 import type { Lock, QueueEntry, StateAdapter } from "chat";
 import { nanoid } from "nanoid";
 
-/**
- * Chat SDK StateAdapter on Vercel Blob — no extra service, one store for the
- * whole bot (bets, notes, and now chat state under wc26-state/).
- *
- * Design constraint: Vercel Blob reads are CDN-cached and the backend no
- * longer supports cache bypass, so overwriting a path can serve stale data
- * for minutes — fatal for locks and dedupe. This adapter therefore NEVER
- * overwrites: every write is a new immutable pathname (immutable blobs are
- * never stale), reads resolve the newest generation via the list() API, and
- * lock/dedupe metadata is encoded in pathnames so checks don't fetch content.
- *
- * Consistency envelope: list-then-put is not atomic, so concurrent writers
- * can both pass an existence check (double lock, double dedupe) in a window
- * of one round-trip. Locks mitigate with a post-acquire re-list where the
- * lexicographically-first pathname wins. At mention-level traffic this is
- * fine; at real volume use a Redis state adapter instead — the channel
- * accepts any StateAdapter.
- */
-
 const ROOT = "wc26-state";
 
 function safe(key: string): string {
   return encodeURIComponent(key).replaceAll("%", "~");
 }
 
-/** Zero-padded ms timestamp so pathnames sort chronologically. */
 function stamp(at: number): string {
   return String(at).padStart(15, "0");
 }
@@ -67,7 +47,6 @@ interface CacheRecord<T> {
   expiresAt: number | null;
 }
 
-/** Newest generation under a cache key, dropping it if expired. */
 async function latestCache<T>(prefix: string): Promise<{ record: CacheRecord<T>; stale: string[] } | null> {
   const gens = await generations(prefix);
   if (gens.length === 0) return null;
@@ -81,7 +60,6 @@ async function latestCache<T>(prefix: string): Promise<{ record: CacheRecord<T>;
   return { record, stale };
 }
 
-/** Lock pathnames carry expiry + token: lock/<threadId>/<expiresAt>-<token> */
 function parseLock(pathname: string): { expiresAt: number; token: string } | null {
   const name = pathname.split("/").at(-1);
   const match = name?.match(/^(\d+)-(.+)\.json$/);
@@ -160,15 +138,13 @@ export function createBlobState(): StateAdapter {
       const existing = await generations(prefix);
       const live = existing.filter((g) => (parseLock(g.pathname)?.expiresAt ?? 0) > now);
       if (live.length > 0) return null;
-      await drop(existing.map((g) => g.pathname)); // expired leftovers
+      await drop(existing.map((g) => g.pathname));
 
       const token = nanoid(12);
       const expiresAt = now + ttlMs;
       const mine = `${prefix}${expiresAt}-${token}.json`;
       await write(mine, { threadId });
 
-      // Two writers can both pass the empty check; re-list and let the
-      // lexicographically-first live pathname win.
       const after = (await generations(prefix)).filter((g) => (parseLock(g.pathname)?.expiresAt ?? 0) > now);
       if (after.length > 0 && after[0].pathname !== mine) {
         await drop([mine]);
@@ -216,7 +192,7 @@ export function createBlobState(): StateAdapter {
       for (const gen of gens) {
         const entry = await readJson<QueueEntry>(gen.url);
         await drop([gen.pathname]);
-        if (entry && entry.expiresAt > now) return entry; // stale entries discarded
+        if (entry && entry.expiresAt > now) return entry;
       }
       return null;
     },

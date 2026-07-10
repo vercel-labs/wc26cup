@@ -11,8 +11,6 @@ export default slackChannel({
   credentials: connectSlackCredentials("slack/wc26bot"),
   threadContext: { since: "last-agent-reply" },
   events: {
-    // render_odds_card returns the PNG as base64; the model only sees a text
-    // summary (toModelOutput), so delivery has to happen here.
     async "action.result"(eventData, channel) {
       const { result } = eventData;
       if (result.kind !== "tool-result" || result.toolName !== "render_odds_card") return;
