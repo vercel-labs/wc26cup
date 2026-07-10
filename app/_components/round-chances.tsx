@@ -2,7 +2,6 @@ import { CheckIcon } from "lucide-react";
 import { Flag } from "@/app/_components/flag";
 import { cn } from "@/lib/utils";
 
-/** "in" = reached; number = implied probability in percent; null = no market. */
 type Cell = "in" | number | null;
 
 const ROUNDS = [
