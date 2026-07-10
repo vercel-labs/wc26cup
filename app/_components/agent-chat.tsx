@@ -21,11 +21,6 @@ function browserHeaders(): Record<string, string> {
   return timeZone ? { "x-wc26-time-zone": timeZone } : {};
 }
 
-function browserHeaders(): Record<string, string> {
-  const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return timeZone ? { "x-wc26-time-zone": timeZone } : {};
-}
-
 export function AgentChat() {
   const agent = useEveAgent({ headers: browserHeaders });
   const isBusy = agent.status === "submitted" || agent.status === "streaming";
