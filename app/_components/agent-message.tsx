@@ -6,7 +6,14 @@ import type {
   EveMessage,
   EveMessagePart,
 } from "eve/react";
-import { CheckCircleIcon, ExternalLinkIcon, KeyRoundIcon, XCircleIcon } from "lucide-react";
+import {
+  CheckCircleIcon,
+  ChevronDownIcon,
+  ExternalLinkIcon,
+  KeyRoundIcon,
+  WrenchIcon,
+  XCircleIcon,
+} from "lucide-react";
 import { BetCard, isScorePick } from "@/app/_components/bet-card";
 import { BracketCard, isBracketData } from "@/app/_components/bracket-card";
 import { isLeaderboardData, LeaderboardCard } from "@/app/_components/leaderboard-card";
@@ -24,6 +31,7 @@ import {
 } from "@/components/ai/tool";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Message, MessageContent } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +56,9 @@ export function AgentMessage({
     (last, part, index) => (part.type === "text" ? index : last),
     -1,
   );
+  const answered = message.parts.some(
+    (part) => part.type === "text" && part.text.trim().length > 0,
+  );
 
   if (message.role === "user") {
     const text = message.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
@@ -69,7 +80,12 @@ export function AgentMessage({
       <MessageContent>
         {segments.map((segment) =>
           segment.kind === "steps" ? (
-            <StepGroup items={segment.items} key={`steps:${segment.items[0].index}`} streaming={isStreaming} />
+            <StepGroup
+              answered={answered}
+              items={segment.items}
+              key={`steps:${segment.items[0].index}`}
+              streaming={isStreaming}
+            />
           ) : (
             <AgentMessagePart
               canRespond={canRespond}
@@ -123,48 +139,104 @@ function buildSegments(parts: readonly EveMessagePart[]): Segment[] {
 }
 
 function StepGroup({
+  answered,
   items,
   streaming,
 }: {
+  readonly answered: boolean;
   readonly items: readonly StepItem[];
   readonly streaming: boolean;
 }) {
+  const tools: EveDynamicToolPart[] = [];
+  let hasReasoning = false;
+  for (const { part } of items) {
+    if (part.type === "reasoning") {
+      hasReasoning = true;
+    } else if (part.type === "dynamic-tool") {
+      tools.push(part);
+    }
+  }
+
   return (
-    <div className="w-full divide-y overflow-hidden rounded-2xl border bg-card/40">
-      {items.map(({ index, part }) => {
-        if (part.type === "reasoning") {
-          return (
-            <div className="px-3 py-2" key={`reasoning:${index}`}>
-              <ReasoningStatus isStreaming={streaming && part.state === "streaming"} />
-            </div>
-          );
-        }
-        if (part.type === "dynamic-tool") {
-          return <ToolStep key={part.toolCallId} part={part} />;
-        }
-        return null;
-      })}
+    <div className="flex flex-col gap-1">
+      {hasReasoning ? <ReasoningStatus isStreaming={streaming && !answered} /> : null}
+      {tools.length > 0 ? <ToolGroup tools={tools} /> : null}
     </div>
+  );
+}
+
+function ToolGroup({ tools }: { readonly tools: readonly EveDynamicToolPart[] }) {
+  const first = tools[0];
+  if (!first) {
+    return null;
+  }
+  if (tools.length === 1) {
+    return <ToolStep part={first} />;
+  }
+  const summaryState: EveDynamicToolPart["state"] = tools.some((t) => t.state === "output-error")
+    ? "output-error"
+    : tools.some((t) => t.state === "input-available" || t.state === "input-streaming")
+      ? "input-available"
+      : "output-available";
+  return (
+    <Collapsible className="group/tools">
+      <CollapsibleTrigger className="flex items-center gap-1.5 text-muted-foreground text-xs transition-colors hover:text-foreground">
+        <WrenchIcon aria-hidden className="size-3.5" />
+        <span className="font-medium text-foreground/80">{first.toolName}</span>
+        <ToolStatusDot state={summaryState} />
+        <span className="text-muted-foreground/60">+{tools.length - 1}</span>
+        <ChevronDownIcon
+          aria-hidden
+          className="size-3 transition-transform group-data-[state=open]/tools:rotate-180"
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-1 ml-1.5 flex flex-col gap-1 border-border/60 border-l pl-3">
+        {tools.map((tool) => (
+          <ToolStep key={tool.toolCallId} part={tool} />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function ToolStatusDot({ state }: { readonly state: EveDynamicToolPart["state"] }) {
+  const tone =
+    state === "output-error"
+      ? "bg-destructive"
+      : state === "output-available"
+        ? "bg-emerald-500"
+        : "bg-muted-foreground/60";
+  const live = state === "input-available" || state === "input-streaming";
+  return (
+    <span aria-hidden className={cn("size-1.5 shrink-0 rounded-full", tone, live && "animate-pulse")} />
   );
 }
 
 function ToolStep({ part }: { readonly part: EveDynamicToolPart }) {
   const showContent = hasInput(part.input) || part.output !== undefined || Boolean(part.errorText);
   return (
-    <Tool className="rounded-none border-0">
-      <ToolHeader
-        state={part.state}
-        title={part.toolName}
-        toolName={part.toolName}
-        type="dynamic-tool"
-      />
+    <Collapsible className="group/tool w-full">
+      <CollapsibleTrigger
+        className="flex items-center gap-1.5 text-muted-foreground text-xs transition-colors hover:text-foreground disabled:pointer-events-none"
+        disabled={!showContent}
+      >
+        <WrenchIcon aria-hidden className="size-3.5" />
+        <span className="font-medium text-foreground/80">{part.toolName}</span>
+        <ToolStatusDot state={part.state} />
+        {showContent ? (
+          <ChevronDownIcon
+            aria-hidden
+            className="size-3 transition-transform group-data-[state=open]/tool:rotate-180"
+          />
+        ) : null}
+      </CollapsibleTrigger>
       {showContent ? (
-        <ToolContent>
+        <CollapsibleContent className="mt-2 space-y-2 pl-5">
           {hasInput(part.input) ? <ToolInput input={part.input} /> : null}
           <ToolOutput errorText={part.errorText} output={part.output} />
-        </ToolContent>
+        </CollapsibleContent>
       ) : null}
-    </Tool>
+    </Collapsible>
   );
 }
 
