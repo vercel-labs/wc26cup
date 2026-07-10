@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/message-scroller";
 import { AgentMessage } from "./agent-message";
 import { Composer } from "./composer";
+import { Suggestions } from "./suggestions";
 
 const AGENT_NAME = "wc26bot";
 const DESCRIPTION =
@@ -62,6 +63,7 @@ export function AgentChat() {
             {DESCRIPTION}
           </p>
           <div className="mt-10 w-full max-w-xl">{composer}</div>
+          <Suggestions className="mt-3 w-full max-w-xl" disabled={isBusy} onSelect={send} />
         </div>
       ) : (
         <>
@@ -89,7 +91,7 @@ export function AgentChat() {
               </MessageScrollerViewport>
             </MessageScroller>
           </MessageScrollerProvider>
-          <div className="shrink-0 px-4 pt-2 pb-4">
+          <div className="shrink-0 px-4 pb-4">
             <div className="mx-auto w-full max-w-2xl">{composer}</div>
           </div>
         </>
