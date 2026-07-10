@@ -7,18 +7,24 @@ import type {
   EveMessagePart,
 } from "eve/react";
 import { CheckCircleIcon, ExternalLinkIcon, KeyRoundIcon, XCircleIcon } from "lucide-react";
+import { BetCard, isBetQuestion } from "@/app/_components/bet-card";
+import { BracketCard, isBracketData } from "@/app/_components/bracket-card";
+import { isLeaderboardData, LeaderboardCard } from "@/app/_components/leaderboard-card";
 import { isMatchCardData, MatchCard } from "@/app/_components/match-card";
+import { isMyBetsData, MyBetsCard } from "@/app/_components/my-bets-card";
 import { isRoundChancesData, RoundChances } from "@/app/_components/round-chances";
-import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
+import { MessageResponse } from "@/components/ai/message";
+import { ReasoningStatus } from "@/components/ai/reasoning";
 import {
   Tool,
   ToolContent,
   ToolHeader,
   ToolInput,
   ToolOutput,
-} from "@/components/ai-elements/tool";
+} from "@/components/ai/tool";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
+import { Message, MessageContent } from "@/components/ui/message";
 import { cn } from "@/lib/utils";
 
 export type AgentInputResponse = {
@@ -43,11 +49,21 @@ export function AgentMessage({
     -1,
   );
 
+  if (message.role === "user") {
+    const text = message.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
+    return (
+      <Message align="end">
+        <MessageContent>
+          <Bubble align="end" variant="muted">
+            <BubbleContent className="whitespace-pre-wrap">{text}</BubbleContent>
+          </Bubble>
+        </MessageContent>
+      </Message>
+    );
+  }
+
   return (
-    <Message
-      data-optimistic={message.metadata?.optimistic ? "true" : undefined}
-      from={message.role}
-    >
+    <Message align="start" className={message.metadata?.optimistic ? "opacity-70" : undefined}>
       <MessageContent>
         {message.parts.map((part, index) => (
           <AgentMessagePart
@@ -55,7 +71,8 @@ export function AgentMessage({
             key={partKey(part, index)}
             onInputResponses={onInputResponses}
             part={part}
-            showCaret={isStreaming && message.role === "assistant" && index === lastTextIndex}
+            showCaret={isStreaming && index === lastTextIndex}
+            streaming={isStreaming}
           />
         ))}
       </MessageContent>
@@ -68,11 +85,13 @@ function AgentMessagePart({
   onInputResponses,
   part,
   showCaret,
+  streaming,
 }: {
   readonly canRespond: boolean;
   readonly onInputResponses: (responses: readonly AgentInputResponse[]) => void | Promise<void>;
   readonly part: EveMessagePart;
   readonly showCaret: boolean;
+  readonly streaming: boolean;
 }) {
   switch (part.type) {
     case "step-start":
@@ -84,15 +103,23 @@ function AgentMessagePart({
         </MessageResponse>
       );
     case "reasoning":
-      return (
-        <Reasoning defaultOpen isStreaming={part.state === "streaming"}>
-          <ReasoningTrigger />
-          <ReasoningContent>{part.text}</ReasoningContent>
-        </Reasoning>
-      );
+      return <ReasoningStatus isStreaming={streaming && part.state === "streaming"} />;
     case "authorization":
       return <AuthorizationPrompt part={part} />;
     case "dynamic-tool": {
+      const inputRequest = part.toolMetadata?.eve?.inputRequest;
+      if (part.toolName === "ask_question" && inputRequest && isBetQuestion(inputRequest.options)) {
+        return (
+          <BetCard
+            onPick={(optionId) =>
+              onInputResponses([{ optionId, requestId: inputRequest.requestId }])
+            }
+            options={inputRequest.options}
+            prompt={inputRequest.prompt}
+            responded={part.toolMetadata?.eve?.inputResponse?.optionId}
+          />
+        );
+      }
       const card = renderToolCard(part);
       if (card !== undefined) {
         return card;
@@ -108,7 +135,7 @@ function AgentMessagePart({
             type="dynamic-tool"
           />
           <ToolContent>
-            <ToolInput input={part.input} />
+            {hasInput(part.input) ? <ToolInput input={part.input} /> : null}
             <InputRequestActions
               canRespond={canRespond}
               part={part}
@@ -122,13 +149,20 @@ function AgentMessagePart({
   }
 }
 
-/**
- * Generative UI: tools whose results render as bespoke components instead of
- * the generic collapsible tool view. Returns undefined to fall back to it
- * (unknown tool, error states, or a payload that fails its shape guard).
- */
+function hasInput(input: unknown): boolean {
+  return Boolean(input && typeof input === "object" && Object.keys(input as object).length > 0);
+}
+
+const CARD_TOOLS = new Set([
+  "show_match_card",
+  "show_round_chances",
+  "show_bracket",
+  "my_bets",
+  "leaderboard",
+]);
+
 function renderToolCard(part: EveDynamicToolPart) {
-  if (part.toolName !== "show_match_card" && part.toolName !== "show_round_chances") {
+  if (!CARD_TOOLS.has(part.toolName)) {
     return undefined;
   }
   if (part.state !== "output-available") {
@@ -141,6 +175,15 @@ function renderToolCard(part: EveDynamicToolPart) {
   }
   if (part.toolName === "show_round_chances" && isRoundChancesData(part.output)) {
     return <RoundChances data={part.output} />;
+  }
+  if (part.toolName === "show_bracket" && isBracketData(part.output)) {
+    return <BracketCard data={part.output} />;
+  }
+  if (part.toolName === "my_bets" && isMyBetsData(part.output)) {
+    return <MyBetsCard data={part.output} />;
+  }
+  if (part.toolName === "leaderboard" && isLeaderboardData(part.output)) {
+    return <LeaderboardCard data={part.output} />;
   }
   return undefined;
 }
