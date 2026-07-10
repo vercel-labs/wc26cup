@@ -30,12 +30,12 @@ export function isLeaderboardData(value: unknown): value is LeaderboardData {
 
 export function LeaderboardCard({ data }: { readonly data: LeaderboardData }) {
   return (
-    <div className="w-full max-w-md rounded-2xl border bg-card p-5">
-      <div className="flex items-baseline justify-between">
+    <div className="flex max-h-[70vh] w-full max-w-md shrink-0 flex-col overflow-hidden rounded-2xl border bg-card p-5">
+      <div className="flex shrink-0 items-baseline justify-between">
         <p className="font-medium text-sm">{data.title ?? "Title race"}</p>
         <span className="text-muted-foreground text-xs">to win</span>
       </div>
-      <div className="mt-3 flex flex-col gap-1">
+      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-1 overflow-auto">
         {data.teams.map((team, index) => (
           <div
             className="flex items-center gap-3 rounded-lg px-2 py-2 odd:bg-muted/30"

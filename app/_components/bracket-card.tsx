@@ -56,8 +56,8 @@ function TeamRow({ team, won }: { readonly team: BracketTeam | null; readonly wo
 
 export function BracketCard({ data }: { readonly data: BracketData }) {
   return (
-    <div className="w-full rounded-2xl border bg-card p-5">
-      <div className="flex gap-3">
+    <div className="flex max-h-[70vh] w-full shrink-0 flex-col overflow-hidden rounded-2xl border bg-card p-5">
+      <div className="flex min-h-0 flex-1 gap-3 overflow-auto">
         {data.rounds.map((round) => (
           <div className="flex min-w-0 flex-1 flex-col gap-3" key={round.name}>
             <p className="font-medium text-muted-foreground text-xs uppercase tracking-wide">

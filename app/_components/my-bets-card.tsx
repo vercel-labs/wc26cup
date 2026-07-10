@@ -82,9 +82,9 @@ export function MyBetsCard({ data }: { readonly data: MyBetsData }) {
   }
 
   return (
-    <div className="w-full max-w-md rounded-2xl border bg-card p-5">
-      <p className="font-medium text-sm">Your predictions</p>
-      <div className="mt-2 flex flex-col divide-y divide-border">
+    <div className="flex max-h-[70vh] w-full max-w-md shrink-0 flex-col overflow-hidden rounded-2xl border bg-card p-5">
+      <p className="shrink-0 font-medium text-sm">Your predictions</p>
+      <div className="mt-2 flex min-h-0 flex-1 flex-col divide-y divide-border overflow-auto">
         {data.predictions.map((entry) => {
           const { fixture, prediction } = entry.placed;
           const result = RESULT[resultKey(entry.terminal)];
