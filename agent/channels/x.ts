@@ -94,6 +94,15 @@ function xAdapter() {
   });
 }
 
+// Per-mention reply guard, keyed on the mention tweet id (falls back to the
+// thread id). Stored in the durable state adapter because ctx.state does not
+// survive between the action.result and message.completed events here.
+function answeredKey(thread: Thread): string {
+  const mentionId = (thread as unknown as { currentMessage?: { id?: string } })
+    .currentMessage?.id;
+  return `x:answered:${mentionId ?? thread.id}`;
+}
+
 export const { bot, channel, send } = chatSdkChannel({
   userName: process.env.X_USERNAME ?? "wc26bot",
   adapters: { x: xAdapter() },
@@ -102,15 +111,13 @@ export const { bot, channel, send } = chatSdkChannel({
   // post-then-edit streaming.
   streaming: false,
   events: {
-    // Hard cap: exactly one post per mention on X. eve posts the text on
-    // `message.completed` and we post the odds card on `action.result`, with no
-    // built-in cap, so a card would post twice (image + text) and multiple agent
-    // messages would each post. `repliedOnce` (reset every turn) lets exactly one
-    // through. One post also means one outbound request, so the adapter's OAuth
-    // refresh never races itself into a dead single-use token.
-    async "turn.started"(_event, ctx) {
-      ctx.state.repliedOnce = false;
-    },
+    // Exactly one reply per mention on X. The card (action.result) and the text
+    // (message.completed) are separate events, and ctx.state does not persist
+    // between them here (the custom card post bypasses eve's state save), so the
+    // reply is claimed in the durable state adapter keyed on the mention. The
+    // card fires first and claims it; the agent's follow-up text then no-ops. The
+    // flag is set only after a successful post, so a failed card upload still
+    // falls back to the text reply.
     async "action.result"(event, ctx) {
       const { result } = event;
       if (
@@ -120,7 +127,11 @@ export const { bot, channel, send } = chatSdkChannel({
         return;
       }
       const output = result.output as RenderedCard;
-      if (!(output?.pngBase64 && ctx.thread) || ctx.state.repliedOnce) {
+      if (!(output?.pngBase64 && ctx.thread)) {
+        return;
+      }
+      const key = answeredKey(ctx.thread);
+      if (await state.get(key)) {
         return;
       }
       const posted = await postCardTweet(
@@ -128,23 +139,20 @@ export const { bot, channel, send } = chatSdkChannel({
         output.caption || "World Cup 2026 odds",
         Buffer.from(output.pngBase64, "base64"),
       );
-      // Mark replied only on success, so a failed upload/post falls back to the
-      // text reply on message.completed.
       if (posted) {
-        ctx.state.repliedOnce = true;
+        await state.set(key, true, 300_000);
       }
     },
     async "message.completed"(event, ctx) {
-      if (
-        event.finishReason === "tool-calls" ||
-        !event.message ||
-        ctx.state.repliedOnce ||
-        !ctx.thread
-      ) {
+      if (event.finishReason === "tool-calls" || !event.message || !ctx.thread) {
+        return;
+      }
+      const key = answeredKey(ctx.thread);
+      if (await state.get(key)) {
         return;
       }
       await ctx.thread.post({ markdown: event.message });
-      ctx.state.repliedOnce = true;
+      await state.set(key, true, 300_000);
     },
   },
 });
