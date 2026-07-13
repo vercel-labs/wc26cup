@@ -156,6 +156,12 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
   // DMs are disabled: X delivers DMs as mentions (isMention), so drop `x:dm:`
   // threads before the agent runs, so there is no reply or image on DMs.
   if (thread.id.startsWith("x:dm:")) return;
+  // Idempotency: X can deliver the same mention more than once and the default
+  // dedup does not catch it in the eve path, so answer at most once per mention
+  // tweet. setIfNotExists writes the key only on the first delivery.
+  if (!(await state.setIfNotExists(`x:handled:${message.id}`, true, 600_000))) {
+    return;
+  }
   if (!allowlisted(message)) return;
   if (!premium(message)) return;
   if (!(await allowed(state, message.author.userId))) return;

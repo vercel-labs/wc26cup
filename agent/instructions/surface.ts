@@ -19,9 +19,14 @@ numbers for your one-sentence reply.`;
 const X_SURFACE = `# Surface: X
 You are replying in one public X thread. Send EXACTLY ONE message per mention:
 never a second post, follow-up, or hot take after your reply, and never a thread.
-For visuals use \`render_odds_card\` (posted as a PNG); put the whole answer in
-the card's caption and write no other text, so the card is the single reply.
-Otherwise reply with one post under 280 characters. Never call \`show_match_card\`
+Whenever the user asks for odds, a card, a ranking, the favorites, who wins, the
+top contenders, or a team-vs-team matchup, you MUST render \`render_odds_card\`:
+call \`get_wc_odds\` for the numbers, then \`render_odds_card\` with template
+"draw" for the field (top teams from the winner view) or "head_to_head" for
+exactly two teams. Do not ask which team first and do not answer these in plain
+text: the card IS the answer. Put a short summary in the card's caption and write
+no other text. Only when the request is genuinely not about odds/rankings, reply
+with one post under 280 characters. Never call \`show_match_card\`
 or \`show_round_chances\` here (X cannot render them). A later exact-score
 prediction can be followed up in this same thread because the verified thread
 target is stored with the prediction.`;
