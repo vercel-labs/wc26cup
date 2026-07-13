@@ -21,6 +21,11 @@ const TWEETS_URL = `${(process.env.X_API_BASE_URL || "https://api.x.com").replac
 // 30 days is safely beyond any X redelivery while still auto-expiring.
 const HANDLED_TTL = 30 * 24 * 60 * 60 * 1000;
 
+// The bot's own X user id. Used to exclude the bot from its own replies'
+// auto-mentions (so they are not delivered back as mentions) and to drop any
+// mention authored by the bot.
+const botUserId = process.env.X_USER_ID;
+
 // Both the card and the text reply are posted here via OAuth 1.0a rather than
 // through the adapter, for two reasons. (1) The app tier lacks the media.write
 // scope, so the adapter's OAuth 2.0 /2/media/upload 403s, while v1.1 media upload
@@ -90,7 +95,13 @@ async function postTweet(
     body: JSON.stringify({
       ...(text.trim() ? { text } : {}),
       ...(mediaId ? { media: { media_ids: [mediaId] } } : {}),
-      reply: { in_reply_to_tweet_id: replyToId },
+      reply: {
+        in_reply_to_tweet_id: replyToId,
+        // X auto-mentions thread participants on a reply, including the bot once
+        // it has replied in the thread, which would deliver our own reply back as
+        // a mention and loop. Excluding the bot stops that at the source.
+        ...(botUserId ? { exclude_reply_user_ids: [botUserId] } : {}),
+      },
     }),
   });
   if (!tweet.ok) {
@@ -220,7 +231,7 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
   // threaded reply, so the bot's own replies come back here as mentions. The
   // adapter's isMe only flags posts it sent through its own postMessage, and we
   // post via OAuth 1.0a outside the adapter, so match the bot's user id directly.
-  if (message.author.isMe || message.author.userId === process.env.X_USER_ID) {
+  if (message.author.isMe || message.author.userId === botUserId) {
     return;
   }
   // Idempotency: X can deliver the same mention more than once (including long
