@@ -38,9 +38,15 @@ export const { bot, channel, send } = chatSdkChannel({
   // post-then-edit streaming.
   streaming: false,
   events: {
-    // Post the rendered odds card as an image, mirroring the Slack channel.
-    // There is no default `action.result` handler, so this augments the text
-    // reply (handled by `message.completed`) rather than replacing it.
+    // Hard cap: exactly one post per mention on X. eve posts the text on
+    // `message.completed` and we post the odds card on `action.result`, with no
+    // built-in cap, so a card would post twice (image + text) and multiple agent
+    // messages would each post. `repliedOnce` (reset every turn) lets exactly one
+    // through. One post also means one outbound request, so the adapter's OAuth
+    // refresh never races itself into a dead single-use token.
+    async "turn.started"(_event, ctx) {
+      ctx.state.repliedOnce = false;
+    },
     async "action.result"(event, ctx) {
       const { result } = event;
       if (
@@ -50,9 +56,10 @@ export const { bot, channel, send } = chatSdkChannel({
         return;
       }
       const output = result.output as RenderedCard;
-      if (!(output?.pngBase64 && ctx.thread)) {
+      if (!(output?.pngBase64 && ctx.thread) || ctx.state.repliedOnce) {
         return;
       }
+      ctx.state.repliedOnce = true;
       await ctx.thread.post({
         markdown: output.caption || "World Cup 2026 odds",
         files: [
@@ -63,6 +70,18 @@ export const { bot, channel, send } = chatSdkChannel({
           },
         ],
       });
+    },
+    async "message.completed"(event, ctx) {
+      if (
+        event.finishReason === "tool-calls" ||
+        !event.message ||
+        ctx.state.repliedOnce ||
+        !ctx.thread
+      ) {
+        return;
+      }
+      ctx.state.repliedOnce = true;
+      await ctx.thread.post({ markdown: event.message });
     },
   },
 });
