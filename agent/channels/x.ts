@@ -4,7 +4,14 @@ import type { Message, Thread } from "chat";
 import { chatSdkChannel } from "eve/channels/chat-sdk";
 import type { SessionContext } from "eve/context";
 import { createBlobState } from "../lib/blob-state.js";
-import { allowed, allowlisted, premium } from "../lib/gating.js";
+import {
+  allowlisted,
+  createBlobQuotaSlotStore,
+  createVerifiedAccountGate,
+  createXInteractionLimit,
+  shouldRejectXMessage,
+} from "../lib/gating.js";
+import { createXVerificationClient } from "../lib/x-verification.js";
 
 interface RenderedCard {
   pngBase64?: string;
@@ -115,8 +122,18 @@ async function postTweet(
   return true;
 }
 
-// Constructed outside the bridge so the rate-limit gate can share it.
+// Shared Chat SDK state; the verified-account gate also uses it as a short cache.
 const state = createBlobState();
+const isVerifiedAccount = createVerifiedAccountGate({
+  cache: {
+    read: (key) => state.get<unknown>(key),
+    write: (key, value, ttlMs) => state.set(key, value, ttlMs),
+  },
+  client: createXVerificationClient(),
+});
+const claimXInteraction = createXInteractionLimit({
+  store: createBlobQuotaSlotStore(),
+});
 
 // Same markdown-to-X-text rendering the adapter uses, reused here so the text
 // reply we post ourselves matches the adapter's output.
@@ -226,14 +243,17 @@ export const { bot, channel, send } = chatSdkChannel({
 // the @mention and re-enter here, while subscribing would answer every
 // message in a public conversation whether or not the bot was addressed.
 bot.onNewMention(async (thread: Thread, message: Message) => {
-  // DMs are disabled: X delivers DMs as mentions (isMention), so drop `x:dm:`
-  // threads before the agent runs, so there is no reply or image on DMs.
-  if (thread.id.startsWith("x:dm:")) return;
-  // Stop self-reply loops. X auto-mentions every thread participant on a
-  // threaded reply, so the bot's own replies come back here as mentions. The
-  // adapter's isMe only flags posts it sent through its own postMessage, and we
-  // post via OAuth 1.0a outside the adapter, so match the bot's user id directly.
-  if (message.author.isMe || message.author.userId === botUserId) {
+  // DMs and self-authored events never reach the model. X_USER_ID is required
+  // because OAuth 1.0a replies bypass the adapter's in-memory isMe tracking;
+  // fail closed when it is absent rather than risk a self-reply loop.
+  if (
+    shouldRejectXMessage({
+      authorUserId: message.author.userId,
+      botUserId,
+      isMe: message.author.isMe,
+      threadId: thread.id,
+    })
+  ) {
     return;
   }
   // Idempotency: X can deliver the same mention more than once (including long
@@ -247,8 +267,8 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
     return;
   }
   if (!allowlisted(message)) return;
-  if (!premium(message)) return;
-  if (!(await allowed(state, message.author.userId))) return;
+  if (!(await isVerifiedAccount(message.author.userId))) return;
+  if (!(await claimXInteraction(message.author.userId))) return;
   await thread.startTyping();
   await send(message.text, {
     auth: {
