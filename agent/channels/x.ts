@@ -1,7 +1,8 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { createXAdapter } from "@chat-adapter/x";
+import { createXAdapter, XFormatConverter } from "@chat-adapter/x";
 import type { Message, Thread } from "chat";
 import { chatSdkChannel } from "eve/channels/chat-sdk";
+import type { SessionContext } from "eve/context";
 import { createBlobState } from "../lib/blob-state.js";
 import { allowed, allowlisted, premium } from "../lib/gating.js";
 
@@ -20,10 +21,14 @@ const TWEETS_URL = `${(process.env.X_API_BASE_URL || "https://api.x.com").replac
 // 30 days is safely beyond any X redelivery while still auto-expiring.
 const HANDLED_TTL = 30 * 24 * 60 * 60 * 1000;
 
-// The app's tier does not expose the media.write scope, so /2/media/upload (OAuth
-// 2.0, what the adapter uses) 403s. v1.1 media upload works via OAuth 1.0a on any
-// tier, so the card is uploaded AND posted entirely with OAuth 1.0a: same user,
-// so the media id is valid on the tweet, and no media.write is needed.
+// Both the card and the text reply are posted here via OAuth 1.0a rather than
+// through the adapter, for two reasons. (1) The app tier lacks the media.write
+// scope, so the adapter's OAuth 2.0 /2/media/upload 403s, while v1.1 media upload
+// works on OAuth 1.0a on any tier. (2) The adapter picks a reply target from an
+// in-memory map that eve's multi-invocation flow loses, so it falls back to the
+// conversation root instead of the tweet that pinged us. Posting here lets us set
+// in_reply_to_tweet_id to the actual mention id, so replies attach to the right
+// tweet in a thread.
 function oauth1Header(method: string, url: string): string {
   const enc = (v: string) =>
     encodeURIComponent(v).replace(/[!*'()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
@@ -43,24 +48,39 @@ function oauth1Header(method: string, url: string): string {
   return `OAuth ${Object.keys(header).sort().map((k) => `${enc(k)}="${enc(header[k])}"`).join(", ")}`;
 }
 
-async function postCardTweet(threadId: string, caption: string, png: Buffer): Promise<boolean> {
-  const form = new FormData();
-  form.append("media", new Blob([new Uint8Array(png)], { type: "image/png" }), "wc26-odds.png");
-  const upload = await fetch(MEDIA_UPLOAD_URL, {
-    method: "POST",
-    headers: { Authorization: oauth1Header("POST", MEDIA_UPLOAD_URL) },
-    body: form,
-  });
-  if (!upload.ok) {
-    console.error("[x] card media upload failed", upload.status, (await upload.text()).slice(0, 200));
-    return false;
-  }
-  const mediaId = ((await upload.json()) as { media_id_string?: string }).media_id_string;
-  if (!mediaId) {
-    return false;
+async function postTweet(
+  replyToId: string,
+  text: string,
+  png?: Buffer,
+): Promise<boolean> {
+  let mediaId: string | undefined;
+  if (png) {
+    const form = new FormData();
+    form.append(
+      "media",
+      new Blob([new Uint8Array(png)], { type: "image/png" }),
+      "wc26-odds.png",
+    );
+    const upload = await fetch(MEDIA_UPLOAD_URL, {
+      method: "POST",
+      headers: { Authorization: oauth1Header("POST", MEDIA_UPLOAD_URL) },
+      body: form,
+    });
+    if (!upload.ok) {
+      console.error(
+        "[x] media upload failed",
+        upload.status,
+        (await upload.text()).slice(0, 200),
+      );
+      return false;
+    }
+    mediaId = ((await upload.json()) as { media_id_string?: string })
+      .media_id_string;
+    if (!mediaId) {
+      return false;
+    }
   }
 
-  const conversationId = threadId.split(":")[2];
   const tweet = await fetch(TWEETS_URL, {
     method: "POST",
     headers: {
@@ -68,13 +88,17 @@ async function postCardTweet(threadId: string, caption: string, png: Buffer): Pr
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      text: caption,
-      media: { media_ids: [mediaId] },
-      ...(conversationId ? { reply: { in_reply_to_tweet_id: conversationId } } : {}),
+      ...(text.trim() ? { text } : {}),
+      ...(mediaId ? { media: { media_ids: [mediaId] } } : {}),
+      reply: { in_reply_to_tweet_id: replyToId },
     }),
   });
   if (!tweet.ok) {
-    console.error("[x] card tweet failed", tweet.status, (await tweet.text()).slice(0, 200));
+    console.error(
+      "[x] tweet failed",
+      tweet.status,
+      (await tweet.text()).slice(0, 200),
+    );
     return false;
   }
   return true;
@@ -82,6 +106,21 @@ async function postCardTweet(threadId: string, caption: string, png: Buffer): Pr
 
 // Constructed outside the bridge so the rate-limit gate can share it.
 const state = createBlobState();
+
+// Same markdown-to-X-text rendering the adapter uses, reused here so the text
+// reply we post ourselves matches the adapter's output.
+const formatConverter = new XFormatConverter();
+
+// The reply must attach to the tweet that pinged us, not the thread root. The
+// mention tweet id is carried on the session auth (set on send() below); fall
+// back to the conversation id encoded in the thread id if it is ever missing.
+function replyTarget(ctx: SessionContext, thread: Thread): string {
+  const id = ctx.session.auth.initiator?.attributes.message_id;
+  if (typeof id === "string") {
+    return id;
+  }
+  return thread.id.split(":")[2] ?? thread.id;
+}
 
 // createXAdapter validates credentials at construction, which breaks
 // `eve build` on machines without X env (build imports this module but no
@@ -110,13 +149,13 @@ export const { bot, channel, send } = chatSdkChannel({
   events: {
     // Exactly one reply per mention on X. The card (action.result) and the text
     // (message.completed) are separate events; ctx.state does not persist between
-    // them here (the custom card post bypasses eve's state save), so the reply is
-    // claimed in the durable state adapter keyed on the turn id (from the third
-    // handler arg, SessionContext). The turn id is unique per mention and shared
-    // by both events of that turn, so the card claims the reply and the follow-up
-    // text no-ops, while a later mention in the same thread is a new turn and is
-    // still answered. The flag is set only after a successful post, so a failed
-    // card upload still falls back to the text reply.
+    // them here (we post outside the adapter), so the reply is claimed in the
+    // durable state adapter keyed on the turn id (from the third handler arg,
+    // SessionContext). The turn id is unique per mention and shared by both events
+    // of that turn, so the card claims the reply and the follow-up text no-ops,
+    // while a later mention in the same thread is a new turn and is still
+    // answered. The flag is set only after a successful post, so a failed card
+    // upload still falls back to the text reply.
     async "action.result"(event, channel, ctx) {
       const { result } = event;
       if (
@@ -133,8 +172,8 @@ export const { bot, channel, send } = chatSdkChannel({
       if (await state.get(key)) {
         return;
       }
-      const posted = await postCardTweet(
-        channel.thread.id,
+      const posted = await postTweet(
+        replyTarget(ctx, channel.thread),
         output.caption || "World Cup 2026 odds",
         Buffer.from(output.pngBase64, "base64"),
       );
@@ -154,8 +193,13 @@ export const { bot, channel, send } = chatSdkChannel({
       if (await state.get(key)) {
         return;
       }
-      await channel.thread.post({ markdown: event.message });
-      await state.set(key, true, 300_000);
+      const posted = await postTweet(
+        replyTarget(ctx, channel.thread),
+        formatConverter.renderPostable({ markdown: event.message }),
+      );
+      if (posted) {
+        await state.set(key, true, 300_000);
+      }
     },
   },
 });
@@ -187,6 +231,7 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
         thread_id: thread.id,
         user_id: message.author.userId,
         user_name: message.author.userName ?? message.author.fullName,
+        message_id: message.id,
       },
       authenticator: "x-webhook",
       principalId: message.author.userId,
