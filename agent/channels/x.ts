@@ -211,6 +211,13 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
   // DMs are disabled: X delivers DMs as mentions (isMention), so drop `x:dm:`
   // threads before the agent runs, so there is no reply or image on DMs.
   if (thread.id.startsWith("x:dm:")) return;
+  // Stop self-reply loops. X auto-mentions every thread participant on a
+  // threaded reply, so the bot's own replies come back here as mentions. The
+  // adapter's isMe only flags posts it sent through its own postMessage, and we
+  // post via OAuth 1.0a outside the adapter, so match the bot's user id directly.
+  if (message.author.isMe || message.author.userId === process.env.X_USER_ID) {
+    return;
+  }
   // Idempotency: X can deliver the same mention more than once (including long
   // after the original), and the default dedup does not catch it in the eve
   // path, so answer at most once per mention tweet. setIfNotExists writes the
