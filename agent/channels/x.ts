@@ -23,8 +23,9 @@ const HANDLED_TTL = 30 * 24 * 60 * 60 * 1000;
 
 // The bot's own X user id. Used to exclude the bot from its own replies'
 // auto-mentions (so they are not delivered back as mentions) and to drop any
-// mention authored by the bot.
-const botUserId = process.env.X_USER_ID;
+// mention authored by the bot. Falls back to the known @wc26bot id because the
+// loop defenses are useless without a real id, and prod's X_USER_ID is empty.
+const botUserId = process.env.X_USER_ID || "2056506125332213760";
 
 // Both the card and the text reply are posted here via OAuth 1.0a rather than
 // through the adapter, for two reasons. (1) The app tier lacks the media.write
