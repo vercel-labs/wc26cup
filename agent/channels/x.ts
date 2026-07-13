@@ -170,8 +170,10 @@ export const { bot, channel, send } = chatSdkChannel({
     // SessionContext). The turn id is unique per mention and shared by both events
     // of that turn, so the card claims the reply and the follow-up text no-ops,
     // while a later mention in the same thread is a new turn and is still
-    // answered. The flag is set only after a successful post, so a failed card
-    // upload still falls back to the text reply.
+    // answered. Each handler claims the flag with setIfNotExists BEFORE its
+    // (slow) post, so a fast follow-up cannot slip in during the OAuth 1.0a
+    // upload; the claim is released on failure so a failed card still falls back
+    // to the text reply.
     async "action.result"(event, channel, ctx) {
       const { result } = event;
       if (
@@ -185,7 +187,7 @@ export const { bot, channel, send } = chatSdkChannel({
         return;
       }
       const key = `x:answered:${ctx.session.turn.id}`;
-      if (await state.get(key)) {
+      if (!(await state.setIfNotExists(key, true, 300_000))) {
         return;
       }
       const posted = await postTweet(
@@ -193,8 +195,8 @@ export const { bot, channel, send } = chatSdkChannel({
         output.caption || "World Cup 2026 odds",
         Buffer.from(output.pngBase64, "base64"),
       );
-      if (posted) {
-        await state.set(key, true, 300_000);
+      if (!posted) {
+        await state.delete(key);
       }
     },
     async "message.completed"(event, channel, ctx) {
@@ -206,15 +208,15 @@ export const { bot, channel, send } = chatSdkChannel({
         return;
       }
       const key = `x:answered:${ctx.session.turn.id}`;
-      if (await state.get(key)) {
+      if (!(await state.setIfNotExists(key, true, 300_000))) {
         return;
       }
       const posted = await postTweet(
         replyTarget(ctx, channel.thread),
         formatConverter.renderPostable({ markdown: event.message }),
       );
-      if (posted) {
-        await state.set(key, true, 300_000);
+      if (!posted) {
+        await state.delete(key);
       }
     },
   },
