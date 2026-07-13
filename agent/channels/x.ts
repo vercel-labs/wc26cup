@@ -14,6 +14,12 @@ interface RenderedCard {
 const MEDIA_UPLOAD_URL = "https://upload.twitter.com/1.1/media/upload.json";
 const TWEETS_URL = `${(process.env.X_API_BASE_URL || "https://api.x.com").replace(/\/+$/, "")}/2/tweets`;
 
+// X's Account Activity API is at-least-once and redelivers events (retries,
+// backlog replay) sometimes 30+ minutes after the original mention, so the
+// per-tweet reply dedup must outlive that window. A tweet id is permanent, so
+// 30 days is safely beyond any X redelivery while still auto-expiring.
+const HANDLED_TTL = 30 * 24 * 60 * 60 * 1000;
+
 // The app's tier does not expose the media.write scope, so /2/media/upload (OAuth
 // 2.0, what the adapter uses) 403s. v1.1 media upload works via OAuth 1.0a on any
 // tier, so the card is uploaded AND posted entirely with OAuth 1.0a: same user,
@@ -161,10 +167,14 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
   // DMs are disabled: X delivers DMs as mentions (isMention), so drop `x:dm:`
   // threads before the agent runs, so there is no reply or image on DMs.
   if (thread.id.startsWith("x:dm:")) return;
-  // Idempotency: X can deliver the same mention more than once and the default
-  // dedup does not catch it in the eve path, so answer at most once per mention
-  // tweet. setIfNotExists writes the key only on the first delivery.
-  if (!(await state.setIfNotExists(`x:handled:${message.id}`, true, 600_000))) {
+  // Idempotency: X can deliver the same mention more than once (including long
+  // after the original), and the default dedup does not catch it in the eve
+  // path, so answer at most once per mention tweet. setIfNotExists writes the
+  // key only on the first delivery; HANDLED_TTL keeps it alive past any X
+  // redelivery window so a stale redelivery never triggers a second reply.
+  if (
+    !(await state.setIfNotExists(`x:handled:${message.id}`, true, HANDLED_TTL))
+  ) {
     return;
   }
   if (!allowlisted(message)) return;
