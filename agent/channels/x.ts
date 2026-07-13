@@ -94,15 +94,6 @@ function xAdapter() {
   });
 }
 
-// Per-mention reply guard, keyed on the mention tweet id (falls back to the
-// thread id). Stored in the durable state adapter because ctx.state does not
-// survive between the action.result and message.completed events here.
-function answeredKey(thread: Thread): string {
-  const mentionId = (thread as unknown as { currentMessage?: { id?: string } })
-    .currentMessage?.id;
-  return `x:answered:${mentionId ?? thread.id}`;
-}
-
 export const { bot, channel, send } = chatSdkChannel({
   userName: process.env.X_USERNAME ?? "wc26bot",
   adapters: { x: xAdapter() },
@@ -112,13 +103,15 @@ export const { bot, channel, send } = chatSdkChannel({
   streaming: false,
   events: {
     // Exactly one reply per mention on X. The card (action.result) and the text
-    // (message.completed) are separate events, and ctx.state does not persist
-    // between them here (the custom card post bypasses eve's state save), so the
-    // reply is claimed in the durable state adapter keyed on the mention. The
-    // card fires first and claims it; the agent's follow-up text then no-ops. The
-    // flag is set only after a successful post, so a failed card upload still
-    // falls back to the text reply.
-    async "action.result"(event, ctx) {
+    // (message.completed) are separate events; ctx.state does not persist between
+    // them here (the custom card post bypasses eve's state save), so the reply is
+    // claimed in the durable state adapter keyed on the turn id (from the third
+    // handler arg, SessionContext). The turn id is unique per mention and shared
+    // by both events of that turn, so the card claims the reply and the follow-up
+    // text no-ops, while a later mention in the same thread is a new turn and is
+    // still answered. The flag is set only after a successful post, so a failed
+    // card upload still falls back to the text reply.
+    async "action.result"(event, channel, ctx) {
       const { result } = event;
       if (
         result.kind !== "tool-result" ||
@@ -127,15 +120,15 @@ export const { bot, channel, send } = chatSdkChannel({
         return;
       }
       const output = result.output as RenderedCard;
-      if (!(output?.pngBase64 && ctx.thread)) {
+      if (!(output?.pngBase64 && channel.thread)) {
         return;
       }
-      const key = answeredKey(ctx.thread);
+      const key = `x:answered:${ctx.session.turn.id}`;
       if (await state.get(key)) {
         return;
       }
       const posted = await postCardTweet(
-        ctx.thread.id,
+        channel.thread.id,
         output.caption || "World Cup 2026 odds",
         Buffer.from(output.pngBase64, "base64"),
       );
@@ -143,15 +136,19 @@ export const { bot, channel, send } = chatSdkChannel({
         await state.set(key, true, 300_000);
       }
     },
-    async "message.completed"(event, ctx) {
-      if (event.finishReason === "tool-calls" || !event.message || !ctx.thread) {
+    async "message.completed"(event, channel, ctx) {
+      if (
+        event.finishReason === "tool-calls" ||
+        !event.message ||
+        !channel.thread
+      ) {
         return;
       }
-      const key = answeredKey(ctx.thread);
+      const key = `x:answered:${ctx.session.turn.id}`;
       if (await state.get(key)) {
         return;
       }
-      await ctx.thread.post({ markdown: event.message });
+      await channel.thread.post({ markdown: event.message });
       await state.set(key, true, 300_000);
     },
   },
