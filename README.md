@@ -48,21 +48,17 @@ pnpm build:eve
 
 Live evals need both credentials shown above. Unit tests and typechecking need neither. Run `pnpm exec eve deploy` to deploy a linked Vercel project.
 
-## Vercel open-source projects used here
+## Reference
 
-This list covers Vercel projects used directly in the app, including AI Elements components checked into this repo. It excludes transitive dependencies.
-
-| Project | Used for |
-| --- | --- |
-| [eve](https://github.com/vercel/eve) | Agent runtime, instructions, tools, schedules, channels, and evals |
-| [AI SDK](https://github.com/vercel/ai) | UI message and tool-part types |
-| [AI Elements](https://github.com/vercel/ai-elements) | Conversation, message, reasoning, and tool UI components |
-| [Chat SDK](https://github.com/vercel/chat) | X adapter plus channel message and state types |
-| [Next.js](https://github.com/vercel/next.js) | Web app and eve route integration |
-| [Streamdown](https://github.com/vercel/streamdown) | Streaming Markdown, code, math, and diagram rendering |
-| [Satori](https://github.com/vercel/satori) | SVG odds-card generation |
-| [Vercel Blob SDK](https://github.com/vercel/storage/tree/main/packages/blob) | Shared facts, predictions, and X channel state |
-| [Vercel Connect SDK](https://github.com/vercel/vercel/tree/main/packages/connect) | Slack credential binding |
-| [Geist](https://github.com/vercel/geist-font) | Sans and mono UI fonts |
+- [eve](https://github.com/vercel/eve)
+- [AI SDK](https://github.com/vercel/ai)
+- [AI Elements](https://github.com/vercel/ai-elements)
+- [Chat SDK](https://github.com/vercel/chat)
+- [Next.js](https://github.com/vercel/next.js)
+- [Streamdown](https://github.com/vercel/streamdown)
+- [Satori](https://github.com/vercel/satori)
+- [Vercel Blob SDK](https://github.com/vercel/storage/tree/main/packages/blob)
+- [Vercel Connect SDK](https://github.com/vercel/vercel/tree/main/packages/connect)
+- [Geist](https://github.com/vercel/geist-font)
 
 Market prices are time-stamped snapshots, not forecasts or betting advice. Predictions are fictitious and involve no money.
