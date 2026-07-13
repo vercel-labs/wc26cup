@@ -58,6 +58,20 @@ function probabilityBar(pct: number, color: string) {
   );
 }
 
+function vercelLogo(size: number) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 116 100"><path d="M57.5 0 115 100H0Z" fill="#ffffff"/></svg>`;
+  const uri = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+  const height = Math.round((size * 100) / 116);
+  return el("img", { width: size, height }, undefined, { src: uri, width: size, height });
+}
+
+function footer(asOf: string, marginTop = 0) {
+  return el("div", { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop }, [
+    el("div", { display: "flex", fontSize: 20, color: "#5b6474" }, `implied win probability · Kalshi + Polymarket · ${asOf}`),
+    vercelLogo(22),
+  ]);
+}
+
 function headToHeadCard(title: string, teams: { name: string; pct: number; flagUri: string }[], asOf: string) {
   const [a, b] = teams;
   const column = (team: { name: string; pct: number; flagUri: string }, color: string) =>
@@ -74,7 +88,7 @@ function headToHeadCard(title: string, teams: { name: string; pct: number; flagU
       flexDirection: "column",
       width: WIDTH,
       height: 520,
-      backgroundColor: "#0b0e14",
+      backgroundColor: "#000000",
       padding: 48,
       gap: 36,
       fontFamily: "Inter",
@@ -86,7 +100,7 @@ function headToHeadCard(title: string, teams: { name: string; pct: number; flagU
         el("div", { display: "flex", fontSize: 48, color: "#3a4152" }, "vs"),
         column(b, "#ffb454"),
       ]),
-      el("div", { display: "flex", fontSize: 20, color: "#5b6474" }, `implied win probability · ${asOf}`),
+      footer(asOf),
     ],
   );
 }
@@ -108,7 +122,7 @@ function drawCard(title: string, teams: { name: string; pct: number; flagUri: st
       flexDirection: "column",
       width: WIDTH,
       height: 200 + teams.length * 68,
-      backgroundColor: "#0b0e14",
+      backgroundColor: "#000000",
       padding: 48,
       gap: 12,
       fontFamily: "Inter",
@@ -116,7 +130,7 @@ function drawCard(title: string, teams: { name: string; pct: number; flagUri: st
     [
       el("div", { display: "flex", fontSize: 30, color: "#8a93a6", marginBottom: 16 }, title),
       ...rows,
-      el("div", { display: "flex", fontSize: 20, color: "#5b6474", marginTop: 16 }, `implied win probability · ${asOf}`),
+      footer(asOf, 16),
     ],
   );
 }
