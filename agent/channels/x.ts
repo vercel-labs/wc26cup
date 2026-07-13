@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from "node:crypto";
 import { createXAdapter } from "@chat-adapter/x";
 import type { Message, Thread } from "chat";
 import { chatSdkChannel } from "eve/channels/chat-sdk";
@@ -8,6 +9,69 @@ interface RenderedCard {
   pngBase64?: string;
   filename?: string;
   caption?: string;
+}
+
+const MEDIA_UPLOAD_URL = "https://upload.twitter.com/1.1/media/upload.json";
+const TWEETS_URL = `${(process.env.X_API_BASE_URL || "https://api.x.com").replace(/\/+$/, "")}/2/tweets`;
+
+// The app's tier does not expose the media.write scope, so /2/media/upload (OAuth
+// 2.0, what the adapter uses) 403s. v1.1 media upload works via OAuth 1.0a on any
+// tier, so the card is uploaded AND posted entirely with OAuth 1.0a: same user,
+// so the media id is valid on the tweet, and no media.write is needed.
+function oauth1Header(method: string, url: string): string {
+  const enc = (v: string) =>
+    encodeURIComponent(v).replace(/[!*'()]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  const params: Record<string, string> = {
+    oauth_consumer_key: process.env.X_CONSUMER_KEY ?? "",
+    oauth_nonce: randomBytes(16).toString("hex"),
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
+    oauth_token: process.env.X_ACCESS_TOKEN ?? "",
+    oauth_version: "1.0",
+  };
+  const p = Object.keys(params).sort().map((k) => `${enc(k)}=${enc(params[k])}`).join("&");
+  const base = [method.toUpperCase(), enc(url), enc(p)].join("&");
+  const key = `${enc(process.env.X_CONSUMER_SECRET ?? "")}&${enc(process.env.X_ACCESS_TOKEN_SECRET ?? "")}`;
+  const signature = createHmac("sha1", key).update(base).digest("base64");
+  const header: Record<string, string> = { ...params, oauth_signature: signature };
+  return `OAuth ${Object.keys(header).sort().map((k) => `${enc(k)}="${enc(header[k])}"`).join(", ")}`;
+}
+
+async function postCardTweet(threadId: string, caption: string, png: Buffer): Promise<boolean> {
+  const form = new FormData();
+  form.append("media", new Blob([png], { type: "image/png" }), "wc26-odds.png");
+  const upload = await fetch(MEDIA_UPLOAD_URL, {
+    method: "POST",
+    headers: { Authorization: oauth1Header("POST", MEDIA_UPLOAD_URL) },
+    body: form,
+  });
+  if (!upload.ok) {
+    console.error("[x] card media upload failed", upload.status, (await upload.text()).slice(0, 200));
+    return false;
+  }
+  const mediaId = ((await upload.json()) as { media_id_string?: string }).media_id_string;
+  if (!mediaId) {
+    return false;
+  }
+
+  const conversationId = threadId.split(":")[2];
+  const tweet = await fetch(TWEETS_URL, {
+    method: "POST",
+    headers: {
+      Authorization: oauth1Header("POST", TWEETS_URL),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      text: caption,
+      media: { media_ids: [mediaId] },
+      ...(conversationId ? { reply: { in_reply_to_tweet_id: conversationId } } : {}),
+    }),
+  });
+  if (!tweet.ok) {
+    console.error("[x] card tweet failed", tweet.status, (await tweet.text()).slice(0, 200));
+    return false;
+  }
+  return true;
 }
 
 // Constructed outside the bridge so the rate-limit gate can share it.
@@ -59,19 +123,16 @@ export const { bot, channel, send } = chatSdkChannel({
       if (!(output?.pngBase64 && ctx.thread) || ctx.state.repliedOnce) {
         return;
       }
-      await ctx.thread.post({
-        markdown: output.caption || "World Cup 2026 odds",
-        files: [
-          {
-            data: Buffer.from(output.pngBase64, "base64"),
-            filename: output.filename ?? "wc26-odds.png",
-            mimeType: "image/png",
-          },
-        ],
-      });
-      // Mark replied only after a successful post, so a failed card upload
-      // (e.g. missing media.write scope) falls back to the text reply below.
-      ctx.state.repliedOnce = true;
+      const posted = await postCardTweet(
+        ctx.thread.id,
+        output.caption || "World Cup 2026 odds",
+        Buffer.from(output.pngBase64, "base64"),
+      );
+      // Mark replied only on success, so a failed upload/post falls back to the
+      // text reply on message.completed.
+      if (posted) {
+        ctx.state.repliedOnce = true;
+      }
     },
     async "message.completed"(event, ctx) {
       if (
