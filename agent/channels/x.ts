@@ -71,6 +71,9 @@ export const { bot, channel, send } = chatSdkChannel({
 // the @mention and re-enter here, while subscribing would answer every
 // message in a public conversation whether or not the bot was addressed.
 bot.onNewMention(async (thread: Thread, message: Message) => {
+  // DMs are disabled: X delivers DMs as mentions (isMention), so drop `x:dm:`
+  // threads before the agent runs, so there is no reply or image on DMs.
+  if (thread.id.startsWith("x:dm:")) return;
   if (!allowlisted(message)) return;
   if (!premium(message)) return;
   if (!(await allowed(state, message.author.userId))) return;
