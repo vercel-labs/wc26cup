@@ -112,10 +112,15 @@ const state = createBlobState();
 const formatConverter = new XFormatConverter();
 
 // The reply must attach to the tweet that pinged us, not the thread root. The
-// mention tweet id is carried on the session auth (set on send() below); fall
-// back to the conversation id encoded in the thread id if it is ever missing.
+// mention tweet id is carried on the session auth (set on send() below). Use the
+// current turn's auth, not the initiator: on a continued thread the initiator is
+// the first mention (the root post), so reading it would attach the reply there
+// instead of the tweet that pinged us this turn. Fall back to the conversation id
+// encoded in the thread id if it is ever missing.
 function replyTarget(ctx: SessionContext, thread: Thread): string {
-  const id = ctx.session.auth.initiator?.attributes.message_id;
+  const id =
+    ctx.session.auth.current?.attributes.message_id ??
+    ctx.session.auth.initiator?.attributes.message_id;
   if (typeof id === "string") {
     return id;
   }
