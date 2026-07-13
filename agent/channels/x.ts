@@ -39,7 +39,7 @@ function oauth1Header(method: string, url: string): string {
 
 async function postCardTweet(threadId: string, caption: string, png: Buffer): Promise<boolean> {
   const form = new FormData();
-  form.append("media", new Blob([png], { type: "image/png" }), "wc26-odds.png");
+  form.append("media", new Blob([new Uint8Array(png)], { type: "image/png" }), "wc26-odds.png");
   const upload = await fetch(MEDIA_UPLOAD_URL, {
     method: "POST",
     headers: { Authorization: oauth1Header("POST", MEDIA_UPLOAD_URL) },
