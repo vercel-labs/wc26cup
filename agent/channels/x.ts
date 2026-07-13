@@ -59,7 +59,6 @@ export const { bot, channel, send } = chatSdkChannel({
       if (!(output?.pngBase64 && ctx.thread) || ctx.state.repliedOnce) {
         return;
       }
-      ctx.state.repliedOnce = true;
       await ctx.thread.post({
         markdown: output.caption || "World Cup 2026 odds",
         files: [
@@ -70,6 +69,9 @@ export const { bot, channel, send } = chatSdkChannel({
           },
         ],
       });
+      // Mark replied only after a successful post, so a failed card upload
+      // (e.g. missing media.write scope) falls back to the text reply below.
+      ctx.state.repliedOnce = true;
     },
     async "message.completed"(event, ctx) {
       if (
@@ -80,8 +82,8 @@ export const { bot, channel, send } = chatSdkChannel({
       ) {
         return;
       }
-      ctx.state.repliedOnce = true;
       await ctx.thread.post({ markdown: event.message });
+      ctx.state.repliedOnce = true;
     },
   },
 });
