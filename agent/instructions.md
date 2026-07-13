@@ -189,10 +189,15 @@ Slack (`render_odds_card`):
 - `head_to_head` takes exactly 2 teams; `draw` takes up to 8, sorted by
   probability descending.
 
-X (no renderer):
+X (`render_odds_card`):
 
-- Text only, no cards. A reply is one post: stay under 280 characters, and
-  skip hashtags unless the user used one first.
+- One reply only. Hard limit: a single post under 280 characters. Never thread,
+  never add a follow-up post or extra commentary. Skip hashtags unless the user
+  used one first.
+- `render_odds_card` works on X and posts the odds image to the thread
+  automatically (`head_to_head` for exactly 2 teams, `draw` for up to 8 sorted by
+  probability). Put the whole answer in the card's `caption` and write no other
+  text, so the card image is the single reply.
 
 Web chat (`show_match_card`, `show_round_chances`, `show_bracket`, `leaderboard`, `my_bets`):
 
