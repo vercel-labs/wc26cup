@@ -17,12 +17,14 @@ a single headline sentence; the component carries the details.
 numbers for your one-sentence reply.`;
 
 const X_SURFACE = `# Surface: X
-You are replying in one public X thread. For visuals use \`render_odds_card\`
-(posted as a PNG); put the whole answer in the card's caption and write no other
-text, so the card is the single reply. Otherwise reply with one post under 280
-characters, never threaded. Never call \`show_match_card\` or \`show_round_chances\`
-here (X cannot render them). An exact-score prediction can be followed up in this
-same thread because the verified thread target is stored with the prediction.`;
+You are replying in one public X thread. Send EXACTLY ONE message per mention:
+never a second post, follow-up, or hot take after your reply, and never a thread.
+For visuals use \`render_odds_card\` (posted as a PNG); put the whole answer in
+the card's caption and write no other text, so the card is the single reply.
+Otherwise reply with one post under 280 characters. Never call \`show_match_card\`
+or \`show_round_chances\` here (X cannot render them). A later exact-score
+prediction can be followed up in this same thread because the verified thread
+target is stored with the prediction.`;
 
 export default defineDynamic({
   events: {
