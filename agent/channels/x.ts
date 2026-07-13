@@ -4,6 +4,12 @@ import { chatSdkChannel } from "eve/channels/chat-sdk";
 import { createBlobState } from "../lib/blob-state.js";
 import { allowed, allowlisted, premium } from "../lib/gating.js";
 
+interface RenderedCard {
+  pngBase64?: string;
+  filename?: string;
+  caption?: string;
+}
+
 // Constructed outside the bridge so the rate-limit gate can share it.
 const state = createBlobState();
 
@@ -31,6 +37,34 @@ export const { bot, channel, send } = chatSdkChannel({
   // X posts are single messages; reply once on completion instead of
   // post-then-edit streaming.
   streaming: false,
+  events: {
+    // Post the rendered odds card as an image, mirroring the Slack channel.
+    // There is no default `action.result` handler, so this augments the text
+    // reply (handled by `message.completed`) rather than replacing it.
+    async "action.result"(event, ctx) {
+      const { result } = event;
+      if (
+        result.kind !== "tool-result" ||
+        result.toolName !== "render_odds_card"
+      ) {
+        return;
+      }
+      const output = result.output as RenderedCard;
+      if (!(output?.pngBase64 && ctx.thread)) {
+        return;
+      }
+      await ctx.thread.post({
+        text: output.caption || "World Cup 2026 odds",
+        files: [
+          {
+            data: Buffer.from(output.pngBase64, "base64"),
+            filename: output.filename ?? "wc26-odds.png",
+            mimeType: "image/png",
+          },
+        ],
+      });
+    },
+  },
 });
 
 // Mention-only, no thread.subscribe(): on X, replies to the bot's post carry
