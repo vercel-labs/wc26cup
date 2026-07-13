@@ -53,7 +53,7 @@ function flagImg(dataUri: string, size: number) {
 function probabilityBar(pct: number, color: string) {
   return el(
     "div",
-    { display: "flex", width: 320, height: 14, backgroundColor: "#1f2430", borderRadius: 7 },
+    { display: "flex", width: 320, height: 14, backgroundColor: "#2a2a2a", borderRadius: 7 },
     [el("div", { display: "flex", width: (320 * Math.max(pct, 1)) / 100, height: 14, backgroundColor: color, borderRadius: 7 })],
   );
 }
@@ -96,9 +96,9 @@ function headToHeadCard(title: string, teams: { name: string; pct: number; flagU
     [
       el("div", { display: "flex", fontSize: 30, color: "#8a93a6" }, title),
       el("div", { display: "flex", justifyContent: "space-between", alignItems: "center" }, [
-        column(a, "#4da3ff"),
+        column(a, a.pct >= b.pct ? "#ffffff" : "#9ca3af"),
         el("div", { display: "flex", fontSize: 48, color: "#3a4152" }, "vs"),
-        column(b, "#ffb454"),
+        column(b, b.pct > a.pct ? "#ffffff" : "#9ca3af"),
       ]),
       footer(asOf),
     ],
@@ -111,8 +111,8 @@ function drawCard(title: string, teams: { name: string; pct: number; flagUri: st
       el("div", { display: "flex", width: 44, fontSize: 30, color: "#3a4152" }, `${i + 1}`),
       flagImg(team.flagUri, 64),
       el("div", { display: "flex", width: 280, fontSize: 34, color: "#f5f7fa" }, team.name),
-      probabilityBar(team.pct, i === 0 ? "#4da3ff" : "#2f6fb5"),
-      el("div", { display: "flex", fontSize: 34, color: "#4da3ff" }, `${team.pct.toFixed(1)}%`),
+      probabilityBar(team.pct, i === 0 ? "#ffffff" : "#6b7280"),
+      el("div", { display: "flex", fontSize: 34, color: "#f5f7fa" }, `${team.pct.toFixed(1)}%`),
     ]),
   );
   return el(
@@ -121,14 +121,14 @@ function drawCard(title: string, teams: { name: string; pct: number; flagUri: st
       display: "flex",
       flexDirection: "column",
       width: WIDTH,
-      height: 200 + teams.length * 68,
+      height: 210 + teams.length * 76,
       backgroundColor: "#000000",
       padding: 48,
       gap: 12,
       fontFamily: "Inter",
     },
     [
-      el("div", { display: "flex", fontSize: 30, color: "#8a93a6", marginBottom: 16 }, title),
+      el("div", { display: "flex", fontSize: 30, color: "#8a93a6", marginBottom: 24 }, title),
       ...rows,
       footer(asOf, 16),
     ],
@@ -163,7 +163,7 @@ export default defineTool({
 
     const svg = await satori(tree as Parameters<typeof satori>[0], {
       width: WIDTH,
-      height: template === "head_to_head" ? 520 : 200 + teams.length * 68,
+      height: template === "head_to_head" ? 520 : 210 + teams.length * 76,
       fonts: [{ name: "Inter", data: font, weight: 600, style: "normal" }],
     });
     const png = new Resvg(svg).render().asPng();
