@@ -1,5 +1,5 @@
 import { eveChannel } from "eve/channels/eve";
-import { type AuthFn, localDev, none, vercelOidc } from "eve/channels/auth";
+import { type AuthFn, localDev, vercelOidc } from "eve/channels/auth";
 import { requestTimeZoneAttributes } from "../lib/timezones.js";
 
 function withRequestTimeZones(authenticate: AuthFn<Request>): AuthFn<Request> {
@@ -22,10 +22,9 @@ export default eveChannel({
     withRequestTimeZones(vercelOidc()),
     // Open on localhost for `eve dev` and the REPL; ignored in production.
     withRequestTimeZones(localDev()),
-    // Open demo: browser visitors chat anonymously. The deployment sits
-    // behind Vercel deployment protection (team SSO), which is the actual
-    // gate. Swap for Auth.js/Clerk if per-user identity is ever needed
-    // (e.g. attributing web bets to real users).
-    withRequestTimeZones(none()),
+    // Anonymous browser access (`none()`) is intentionally NOT enabled: the X
+    // webhook requires Vercel deployment protection to be OFF, so an anonymous
+    // web channel would be wide open to abuse. Re-add `none()` only behind your
+    // own gate (deployment protection, Auth.js/Clerk, etc.).
   ],
 });
