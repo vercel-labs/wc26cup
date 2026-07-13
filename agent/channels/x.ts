@@ -54,7 +54,7 @@ export const { bot, channel, send } = chatSdkChannel({
         return;
       }
       await ctx.thread.post({
-        text: output.caption || "World Cup 2026 odds",
+        markdown: output.caption || "World Cup 2026 odds",
         files: [
           {
             data: Buffer.from(output.pngBase64, "base64"),
