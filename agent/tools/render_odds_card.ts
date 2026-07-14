@@ -4,7 +4,13 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 
 const WIDTH = 900;
-const FONT_URL = "https://unpkg.com/@fontsource/inter@5.1.0/files/inter-latin-600-normal.woff";
+const MARGIN = 18;
+const RADIUS = 24;
+const BORDER = "#2a2d35";
+const BG = "#000000";
+const FONT_URL = "https://cdn.jsdelivr.net/npm/@fontsource/geist-mono@5/files/geist-mono-latin-500-normal.woff";
+
+const EVE_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 40" fill="none"><path d="M127.474 6.39062H88.7139L61.6484 40.001H53.0693L85.2393 0H127.474V6.39062Z" fill="#ffffff"/><path d="M127.474 33.5938V39.9844H92.873V33.5938H127.474Z" fill="#ffffff"/><path d="M34.5996 39.9834H0V33.5928H34.5996V39.9834Z" fill="#ffffff"/><path d="M29.1592 23.0557H0V16.666H29.1592V23.0557Z" fill="#ffffff"/><path d="M127.474 23.0557H98.3135V16.666H127.474V23.0557Z" fill="#ffffff"/><path d="M56.9609 6.39062H0V0H56.9609V6.39062Z" fill="#ffffff"/></svg>`;
 
 const teamSchema = z.object({
   name: z.string().min(1).max(32),
@@ -14,6 +20,9 @@ const teamSchema = z.object({
     .describe("Lowercase flagcdn code: ISO 3166-1 alpha-2 ('ar', 'fr'); England is 'gb-eng'"),
   pct: z.number().min(0).max(100).describe("Implied probability in percent, from get_wc_odds"),
 });
+
+type Team = z.infer<typeof teamSchema>;
+type CardInput = { template: "head_to_head" | "draw"; title: string; teams: Team[]; asOf: string };
 
 let fontData: Promise<ArrayBuffer> | undefined;
 function loadFont(): Promise<ArrayBuffer> {
@@ -43,101 +52,125 @@ function el(type: string, style: Record<string, unknown>, children?: unknown, ex
 }
 
 function flagImg(dataUri: string, size: number) {
-  return el("img", { width: size, height: Math.round(size * 0.75), borderRadius: 8 }, undefined, {
-    src: dataUri,
-    width: size,
-    height: Math.round(size * 0.75),
-  });
+  const height = Math.round(size * 0.72);
+  return el("img", { width: size, height, borderRadius: 6 }, undefined, { src: dataUri, width: size, height });
 }
 
-function probabilityBar(pct: number, color: string) {
-  return el(
-    "div",
-    { display: "flex", width: 320, height: 14, backgroundColor: "#2a2a2a", borderRadius: 7 },
-    [el("div", { display: "flex", width: (320 * Math.max(pct, 1)) / 100, height: 14, backgroundColor: color, borderRadius: 7 })],
-  );
-}
-
-function vercelLogo(size: number) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 116 100"><path d="M57.5 0 115 100H0Z" fill="#ffffff"/></svg>`;
-  const uri = `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
-  const height = Math.round((size * 100) / 116);
+function eveLogo(size: number) {
+  const uri = `data:image/svg+xml;base64,${Buffer.from(EVE_LOGO).toString("base64")}`;
+  const height = Math.round((size * 40) / 128);
   return el("img", { width: size, height }, undefined, { src: uri, width: size, height });
 }
 
-function footer(asOf: string, marginTop = 0) {
-  return el("div", { display: "flex", justifyContent: "space-between", alignItems: "center", marginTop }, [
-    el("div", { display: "flex", fontSize: 20, color: "#5b6474" }, `implied win probability · Kalshi + Polymarket · ${asOf}`),
-    vercelLogo(22),
+function bar(pct: number, denom: number, color: string, trackWidth: number) {
+  const fill = Math.max(5, Math.min(trackWidth, (pct / denom) * trackWidth));
+  return el("div", { display: "flex", width: trackWidth, height: 8, backgroundColor: "#22252b", borderRadius: 4 }, [
+    el("div", { display: "flex", width: fill, height: 8, backgroundColor: color, borderRadius: 4 }),
   ]);
 }
 
-function headToHeadCard(title: string, teams: { name: string; pct: number; flagUri: string }[], asOf: string) {
-  const [a, b] = teams;
-  const column = (team: { name: string; pct: number; flagUri: string }, color: string) =>
-    el("div", { display: "flex", flexDirection: "column", alignItems: "center", gap: 18 }, [
-      flagImg(team.flagUri, 160),
-      el("div", { display: "flex", fontSize: 40, color: "#f5f7fa" }, team.name),
-      el("div", { display: "flex", fontSize: 64, color }, `${team.pct.toFixed(1)}%`),
-      probabilityBar(team.pct, color),
-    ]);
+function footer(asOf: string) {
+  return el("div", { display: "flex", justifyContent: "space-between", alignItems: "center" }, [
+    el("div", { display: "flex", fontSize: 16, color: "#565f6e" }, `kalshi + polymarket · ${asOf}`.toLowerCase()),
+    eveLogo(42),
+  ]);
+}
+
+function shell(height: number, title: string, rows: unknown[], asOf: string, rowGap: number) {
   return el(
     "div",
-    {
-      display: "flex",
-      flexDirection: "column",
-      width: WIDTH,
-      height: 520,
-      backgroundColor: "#000000",
-      padding: 48,
-      gap: 36,
-      fontFamily: "Inter",
-    },
+    { display: "flex", width: WIDTH, height, backgroundColor: BG, padding: MARGIN, fontFamily: "Geist Mono", fontWeight: 500 },
     [
-      el("div", { display: "flex", fontSize: 30, color: "#8a93a6" }, title),
-      el("div", { display: "flex", justifyContent: "space-between", alignItems: "center" }, [
-        column(a, a.pct >= b.pct ? "#ffffff" : "#9ca3af"),
-        el("div", { display: "flex", fontSize: 48, color: "#3a4152" }, "vs"),
-        column(b, b.pct > a.pct ? "#ffffff" : "#9ca3af"),
-      ]),
-      footer(asOf),
+      el(
+        "div",
+        {
+          display: "flex",
+          flexDirection: "column",
+          flexGrow: 1,
+          border: `1px solid ${BORDER}`,
+          borderRadius: RADIUS,
+          backgroundColor: BG,
+          paddingTop: 52,
+          paddingBottom: 48,
+          paddingLeft: 60,
+          paddingRight: 60,
+        },
+        [
+          el("div", { display: "flex", fontSize: 22, color: "#7e8695" }, title.toLowerCase()),
+          el("div", { display: "flex", flexDirection: "column", flexGrow: 1, justifyContent: "center", gap: rowGap }, rows),
+          footer(asOf),
+        ],
+      ),
     ],
   );
 }
 
-function drawCard(title: string, teams: { name: string; pct: number; flagUri: string }[], asOf: string) {
+function nameColor(lead: boolean) {
+  return lead ? "#ffffff" : "#dfe3ea";
+}
+function pctColor(lead: boolean) {
+  return lead ? "#ffffff" : "#7c8695";
+}
+function barColor(lead: boolean) {
+  return lead ? "#ffffff" : "#525a67";
+}
+
+function headToHeadCard(title: string, teams: (Team & { flagUri: string })[], asOf: string) {
   const rows = teams.map((team, i) =>
-    el("div", { display: "flex", alignItems: "center", gap: 24, height: 64 }, [
-      el("div", { display: "flex", width: 44, fontSize: 30, color: "#3a4152" }, `${i + 1}`),
-      flagImg(team.flagUri, 64),
-      el("div", { display: "flex", width: 280, fontSize: 34, color: "#f5f7fa" }, team.name),
-      probabilityBar(team.pct, i === 0 ? "#ffffff" : "#6b7280"),
-      el("div", { display: "flex", fontSize: 34, color: "#f5f7fa" }, `${team.pct.toFixed(1)}%`),
+    el("div", { display: "flex", alignItems: "center", justifyContent: "space-between", height: 52 }, [
+      el("div", { display: "flex", alignItems: "center" }, [
+        flagImg(team.flagUri, 42),
+        el("div", { display: "flex", marginLeft: 20, fontSize: 30, color: nameColor(i === 0) }, team.name.toLowerCase()),
+      ]),
+      bar(team.pct, 100, barColor(i === 0), 260),
+      el("div", { display: "flex", width: 104, justifyContent: "flex-end", fontSize: 30, color: pctColor(i === 0) }, `${team.pct.toFixed(1)}%`),
     ]),
   );
-  return el(
-    "div",
-    {
-      display: "flex",
-      flexDirection: "column",
-      width: WIDTH,
-      height: 210 + teams.length * 76,
-      backgroundColor: "#000000",
-      padding: 48,
-      gap: 12,
-      fontFamily: "Inter",
-    },
-    [
-      el("div", { display: "flex", fontSize: 30, color: "#8a93a6", marginBottom: 24 }, title),
-      ...rows,
-      footer(asOf, 16),
-    ],
+  return shell(cardHeight("head_to_head", 2), title, rows, asOf, 36);
+}
+
+function drawCard(title: string, teams: (Team & { flagUri: string })[], asOf: string) {
+  const max = teams[0]?.pct ?? 100;
+  const rows = teams.map((team, i) =>
+    el("div", { display: "flex", alignItems: "center", justifyContent: "space-between", height: 46 }, [
+      el("div", { display: "flex", alignItems: "center" }, [
+        el("div", { display: "flex", width: 30, fontSize: 24, color: "#4b5563" }, `${i + 1}`),
+        flagImg(team.flagUri, 38),
+        el("div", { display: "flex", marginLeft: 18, fontSize: 26, color: nameColor(i === 0) }, team.name.toLowerCase()),
+      ]),
+      bar(team.pct, max, barColor(i === 0), 260),
+      el("div", { display: "flex", width: 88, justifyContent: "flex-end", fontSize: 26, color: pctColor(i === 0) }, `${team.pct.toFixed(1)}%`),
+    ]),
   );
+  return shell(cardHeight("draw", teams.length), title, rows, asOf, 26);
+}
+
+function cardHeight(template: "head_to_head" | "draw", teamCount: number) {
+  return template === "head_to_head" ? 400 : 208 + teamCount * 72;
+}
+
+export async function renderOddsCard(input: CardInput): Promise<Buffer> {
+  const [font, ...flagUris] = await Promise.all([loadFont(), ...input.teams.map((team) => loadFlagDataUri(team.flag))]);
+  const withFlags = input.teams
+    .map((team, i) => ({ ...team, flagUri: flagUris[i] }))
+    .sort((a, b) => b.pct - a.pct);
+
+  const tree =
+    input.template === "head_to_head"
+      ? headToHeadCard(input.title, withFlags, input.asOf)
+      : drawCard(input.title, withFlags, input.asOf);
+
+  const svg = await satori(tree as Parameters<typeof satori>[0], {
+    width: WIDTH,
+    height: cardHeight(input.template, input.teams.length),
+    fonts: [{ name: "Geist Mono", data: font, weight: 500, style: "normal" }],
+  });
+  return Buffer.from(new Resvg(svg).render().asPng());
 }
 
 export default defineTool({
   description:
-    "Render a World Cup odds image card (PNG). Two templates: 'head_to_head' compares exactly 2 teams; 'draw' ranks 2-8 teams by probability. Pass probabilities from get_wc_odds. The card is posted to the thread automatically — do not describe its contents in detail afterwards.",
+    "Render a World Cup odds image card (PNG). Two templates: 'head_to_head' compares exactly 2 teams; 'draw' ranks 2-8 teams by probability. Pass probabilities from get_wc_odds. Never include teams already eliminated from the World Cup (knocked out) — only teams still in the tournament. The card is posted to the thread automatically — do not describe its contents in detail afterwards.",
   inputSchema: z.object({
     template: z.enum(["head_to_head", "draw"]),
     title: z.string().min(1).max(80),
@@ -149,27 +182,11 @@ export default defineTool({
       return { error: "head_to_head requires exactly 2 teams" };
     }
 
-    const [font, ...flagUris] = await Promise.all([
-      loadFont(),
-      ...teams.map((team) => loadFlagDataUri(team.flag)),
-    ]);
-    const withFlags = teams.map((team, i) => ({ ...team, flagUri: flagUris[i] }));
-    const asOf = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
-
-    const tree =
-      template === "head_to_head"
-        ? headToHeadCard(title, withFlags, asOf)
-        : drawCard(title, [...withFlags].sort((a, b) => b.pct - a.pct), asOf);
-
-    const svg = await satori(tree as Parameters<typeof satori>[0], {
-      width: WIDTH,
-      height: template === "head_to_head" ? 520 : 210 + teams.length * 76,
-      fonts: [{ name: "Inter", data: font, weight: 600, style: "normal" }],
-    });
-    const png = new Resvg(svg).render().asPng();
+    const asOf = `${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC`;
+    const png = await renderOddsCard({ template, title, teams, asOf });
 
     return {
-      pngBase64: Buffer.from(png).toString("base64"),
+      pngBase64: png.toString("base64"),
       filename: `wc26-${template}-${teams.map((t) => t.flag).join("-")}.png`,
       caption,
       byteLength: png.length,
