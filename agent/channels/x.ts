@@ -28,10 +28,12 @@ const TWEETS_URL = `${(process.env.X_API_BASE_URL || "https://api.x.com").replac
 // 30 days is safely beyond any X redelivery while still auto-expiring.
 const HANDLED_TTL = 30 * 24 * 60 * 60 * 1000;
 
-// The bot's own X user id (X_USER_ID env, required in prod). Used to exclude the
-// bot from its own replies' auto-mentions (so they are not delivered back as
-// mentions) and to drop any mention authored by the bot.
-const botUserId = process.env.X_USER_ID;
+// The bot's own X user id. Excludes the bot from its own replies' auto-mentions,
+// drops mentions the bot authored, and is the self-identity guard in
+// shouldRejectXMessage, which FAILS CLOSED (blocks every reply) when it is empty.
+// X_USER_ID is a sensitive Vercel env var whose value can't be read back to
+// verify, so fall back to the known @wc26bot id to guarantee it is always set.
+const botUserId = process.env.X_USER_ID || "2056506125332213760";
 
 // Both the card and the text reply are posted here via OAuth 1.0a rather than
 // through the adapter, for two reasons. (1) The app tier lacks the media.write
