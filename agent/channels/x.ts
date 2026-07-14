@@ -244,12 +244,16 @@ export const { bot, channel, send } = chatSdkChannel({
 
 // X flags every delivered post.mention.create as a mention, but a reply in a
 // thread auto-carries the parent's @mentions as a leading "replying to @a @b"
-// prefix, so the bot shows up as mentioned on replies it was never addressed in
-// (someone replying "👀" to a tweet that pinged the bot, or to a third party).
+// prefix, so the bot shows up as mentioned on replies it was never addressed in.
 // X's display_text_range marks where the user-authored text starts, after that
-// auto-prefix. Reply only when the bot's @ was typed by the user (its position
-// is inside the display text), never when it is just the carried-over prefix.
-// Verified against real payloads in .bot/x/captures.
+// prefix, and mention/range offsets are Unicode codepoints (spread the string to
+// index them, since JS slices UTF-16 units). Answer when the user typed the @
+// themselves (inside the display text), or when the reply is aimed at the bot (or
+// the author continuing their own thread to it) AND carries an actual worded
+// message. Stay silent on reactions like "👀" and on replies to third parties
+// where the bot is merely carried along. Fail open if the payload lacks the
+// fields. Verified against real payloads in .bot/x/captures.
+const HAS_LETTER = /\p{L}/u;
 interface XPostMention {
   start?: number;
   id?: string;
@@ -258,6 +262,8 @@ interface XPostMention {
 interface XPostShape {
   entities?: { mentions?: XPostMention[] };
   display_text_range?: number[];
+  in_reply_to_user_id?: string;
+  text?: string;
 }
 function addressedToBot(message: Message): boolean {
   const post = (message.raw as { post?: XPostShape } | undefined)?.post;
@@ -272,7 +278,15 @@ function addressedToBot(message: Message): boolean {
   if (typeof range?.[0] !== "number" || typeof botMention.start !== "number") {
     return true;
   }
-  return botMention.start >= range[0];
+  if (botMention.start >= range[0]) {
+    return true;
+  }
+  const target = post?.in_reply_to_user_id;
+  if (target !== botUserId && target !== message.author.userId) {
+    return false;
+  }
+  const body = typeof post?.text === "string" ? [...post.text].slice(range[0], range[1]).join("") : "";
+  return HAS_LETTER.test(body);
 }
 
 // Mention-only, no thread.subscribe(): on X, replies to the bot's post carry
