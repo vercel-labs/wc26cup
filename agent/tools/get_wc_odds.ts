@@ -1,7 +1,30 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
-import { fetchFixtureById, FixtureIdSchema } from "../lib/fixtures.js";
+import { aliveTeamNames, fetchFixtureById, FixtureIdSchema } from "../lib/fixtures.js";
 import { fetchMatchMarkets } from "../lib/odds.js";
+
+// Market team names (Polymarket/Kalshi) vs fixture names (ESPN). Normalize and
+// alias the few known divergences so the bracket cross-check matches reliably.
+const TEAM_ALIASES: Readonly<Record<string, string>> = {
+  korearepublic: "southkorea",
+  unitedstates: "usa",
+};
+
+function normalizeTeamName(name: string): string {
+  const base = name.toLowerCase().replace(/[^a-z]/gu, "");
+  return TEAM_ALIASES[base] ?? base;
+}
+
+function isTeamAlive(team: string, alive: ReadonlySet<string>): boolean {
+  const normalized = normalizeTeamName(team);
+  if (alive.has(normalized)) return true;
+  for (const name of alive) {
+    if (name.length > 3 && (name.includes(normalized) || normalized.includes(name))) {
+      return true;
+    }
+  }
+  return false;
+}
 
 const POLYMARKET_WINNER_SLUG = "world-cup-winner";
 const KALSHI_WINNER_SERIES = "KXMENWORLDCUP";
@@ -115,7 +138,7 @@ async function searchPolymarket(query: string, limit: number) {
 
 export default defineTool({
   description:
-    "Fresh World Cup 2026 prediction-market prices. 'match' fetches Polymarket and Kalshi for one stable fixture ID and one settlement contract. Use 'advance' for a knockout winner including extra time/penalties; use 'regulation_time' for 90-minute home/draw/away. 'winner' is tournament champion only. Never compare unlike contract kinds.",
+    "Fresh World Cup 2026 prediction-market prices. 'match' fetches Polymarket and Kalshi for one stable fixture ID and one settlement contract. Use 'advance' for a knockout winner including extra time/penalties; use 'regulation_time' for 90-minute home/draw/away. 'winner' is tournament champion only. Never include teams already eliminated from the World Cup (knocked out) in rankings or leaderboards — only teams still in the tournament, even if a market still lists an eliminated team at ~0%. Never compare unlike contract kinds.",
   inputSchema: FlatInputSchema,
   async execute(rawInput) {
     const parsed = InputSchema.safeParse(rawInput);
@@ -155,6 +178,27 @@ export default defineTool({
       return { error: "Both Polymarket and Kalshi were unreachable. Try again shortly." };
     }
     const teams = new Set([...polymarketOdds.keys(), ...kalshiOdds.keys()]);
+    let ranked = [...teams]
+      .map((team) => ({
+        kalshiPct: kalshiOdds.get(team) ?? null,
+        polymarketPct: polymarketOdds.get(team) ?? null,
+        team,
+      }))
+      .sort((left, right) => (right.polymarketPct ?? right.kalshiPct ?? 0) - (left.polymarketPct ?? left.kalshiPct ?? 0));
+
+    // Cross-check the bracket: drop teams with no upcoming fixture (knocked out),
+    // even if a market still lists them at ~0%. Fail open — if the fixture fetch
+    // errors or would empty the list, keep the raw market ranking rather than
+    // returning nothing.
+    const aliveList = await aliveTeamNames().catch(() => [] as string[]);
+    if (aliveList.length > 0) {
+      const alive = new Set(aliveList.map(normalizeTeamName));
+      const stillIn = ranked.filter((entry) => isTeamAlive(entry.team, alive));
+      if (stillIn.length > 0) {
+        ranked = stillIn;
+      }
+    }
+
     return {
       asOf,
       market: "2026 Men's World Cup winner (market-implied probability, %)",
@@ -162,14 +206,7 @@ export default defineTool({
         kalshi: kalshiOdds.size > 0 ? "ok" : "unavailable",
         polymarket: polymarketOdds.size > 0 ? "ok" : "unavailable",
       },
-      teams: [...teams]
-        .map((team) => ({
-          kalshiPct: kalshiOdds.get(team) ?? null,
-          polymarketPct: polymarketOdds.get(team) ?? null,
-          team,
-        }))
-        .sort((left, right) => (right.polymarketPct ?? right.kalshiPct ?? 0) - (left.polymarketPct ?? left.kalshiPct ?? 0))
-        .slice(0, input.limit),
+      teams: ranked.slice(0, input.limit),
     };
   },
 });

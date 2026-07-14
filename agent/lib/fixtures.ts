@@ -285,6 +285,20 @@ export async function fetchTournamentFixtures(options: { readonly now?: Date } =
   return parseEspnScoreboard(value);
 }
 
+// Teams still in the tournament: anyone with a non-final upcoming fixture. A team
+// knocked out has no remaining fixture, so it drops out. Used to cross-check the
+// bracket against prediction-market rankings that may still list eliminated teams.
+export async function aliveTeamNames(options: { readonly now?: Date } = {}): Promise<string[]> {
+  const fixtures = await fetchTournamentFixtures(options);
+  const alive = new Set<string>();
+  for (const fixture of fixtures) {
+    if (fixture.status.kind === "final" || fixture.status.kind === "cancelled") continue;
+    alive.add(fixture.home.name);
+    alive.add(fixture.away.name);
+  }
+  return [...alive];
+}
+
 export async function fetchFixturesForRange(from: string, through: string): Promise<readonly Fixture[]> {
   const CompactDateSchema = z.string().regex(/^\d{8}$/u);
   const start = CompactDateSchema.parse(from);
