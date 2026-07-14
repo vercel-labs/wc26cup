@@ -34,6 +34,7 @@ const HANDLED_TTL = 30 * 24 * 60 * 60 * 1000;
 // X_USER_ID is a sensitive Vercel env var whose value can't be read back to
 // verify, so fall back to the known @wc26bot id to guarantee it is always set.
 const botUserId = process.env.X_USER_ID || "2056506125332213760";
+const botUserName = (process.env.X_USERNAME ?? "wc26bot").toLowerCase();
 
 // Both the card and the text reply are posted here via OAuth 1.0a rather than
 // through the adapter, for two reasons. (1) The app tier lacks the media.write
@@ -241,6 +242,47 @@ export const { bot, channel, send } = chatSdkChannel({
   },
 });
 
+// X flags every delivered post.mention.create as a mention, but a reply in a
+// thread auto-carries the parent's @mentions as a leading "replying to @a @b"
+// prefix, so the bot is listed as mentioned on replies it was never addressed in
+// (someone replying "👀" to a tweet that pinged the bot, or replying to a third
+// party). X's display_text_range marks where the user-authored text starts,
+// after that auto-prefix. Treat the bot as addressed only when its @ sits inside
+// the display text, or the reply is directly to the bot's own tweet. Fail open
+// when the payload lacks the fields so a real ping is never dropped. Verified
+// against real payloads in .bot/x/captures.
+interface XPostMention {
+  start?: number;
+  id?: string;
+  username?: string;
+}
+interface XPostShape {
+  entities?: { mentions?: XPostMention[] };
+  display_text_range?: number[];
+  in_reply_to_user_id?: string;
+}
+function addressedToBot(message: Message): boolean {
+  const post = (message.raw as { post?: XPostShape } | undefined)?.post;
+  const mentions = post?.entities?.mentions;
+  if (!Array.isArray(mentions)) {
+    return true;
+  }
+  const botMention = mentions.find(
+    (m) => m.id === botUserId || m.username?.toLowerCase() === botUserName,
+  );
+  if (!botMention) {
+    return false;
+  }
+  if (post?.in_reply_to_user_id === botUserId) {
+    return true;
+  }
+  const range = post?.display_text_range;
+  if (typeof range?.[0] !== "number" || typeof botMention.start !== "number") {
+    return true;
+  }
+  return botMention.start >= range[0];
+}
+
 // Mention-only, no thread.subscribe(): on X, replies to the bot's post carry
 // the @mention and re-enter here, while subscribing would answer every
 // message in a public conversation whether or not the bot was addressed.
@@ -260,6 +302,13 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
     })
   ) {
     console.warn("[x] DROP shouldRejectXMessage");
+    return;
+  }
+  // Only answer when actually addressed, not when carried along a thread's reply
+  // prefix. Checked before dedup/verification/quota so passive mentions cost
+  // nothing.
+  if (!addressedToBot(message)) {
+    console.warn("[x] DROP not addressed (thread carryover mention)");
     return;
   }
   // Idempotency: X can deliver the same mention more than once (including long
