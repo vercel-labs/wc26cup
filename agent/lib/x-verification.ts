@@ -15,6 +15,7 @@ const UserLookupResponseSchema = z.object({
   data: z.object({
     id: z.string().min(1),
     verified: z.boolean(),
+    verified_type: z.string().optional(),
   }),
 });
 
@@ -101,7 +102,10 @@ export function createXVerificationClient({
     async isVerified(rawUserId) {
       const userId = XUserIdSchema.parse(rawUserId);
       const url = new URL(`${apiBaseUrl}/2/users/${encodeURIComponent(userId)}`);
-      url.searchParams.set("user.fields", "verified");
+      // `verified` alone is the legacy (pre-2023) blue check and reads false for
+      // X Premium/business/government accounts; request `verified_type` too and
+      // treat any non-`none` type as verified.
+      url.searchParams.set("user.fields", "verified,verified_type");
       const response = await fetchX(url, {
         headers: { Authorization: `Bearer ${await bearer()}` },
       });
@@ -114,7 +118,8 @@ export function createXVerificationClient({
       if (!parsed.success) {
         throw new Error("Invalid X user lookup response");
       }
-      return parsed.data.data.id === userId && parsed.data.data.verified;
+      const { id, verified, verified_type: verifiedType } = parsed.data.data;
+      return id === userId && (verified || (verifiedType ?? "none") !== "none");
     },
   };
 }
