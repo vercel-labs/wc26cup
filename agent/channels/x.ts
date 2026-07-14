@@ -248,6 +248,9 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
   // DMs and self-authored events never reach the model. X_USER_ID is required
   // because OAuth 1.0a replies bypass the adapter's in-memory isMe tracking;
   // fail closed when it is absent rather than risk a self-reply loop.
+  console.warn(
+    `[x] mention id=${message.id} from=${message.author.userId} @${message.author.userName} isMe=${message.author.isMe} thread=${thread.id} botUserId=${botUserId ?? "MISSING"}`,
+  );
   if (
     shouldRejectXMessage({
       authorUserId: message.author.userId,
@@ -256,6 +259,7 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
       threadId: thread.id,
     })
   ) {
+    console.warn("[x] DROP shouldRejectXMessage");
     return;
   }
   // Idempotency: X can deliver the same mention more than once (including long
@@ -266,11 +270,22 @@ bot.onNewMention(async (thread: Thread, message: Message) => {
   if (
     !(await state.setIfNotExists(`x:handled:${message.id}`, true, HANDLED_TTL))
   ) {
+    console.warn("[x] DROP dedup");
     return;
   }
-  if (!allowlisted(message)) return;
-  if (!(await isVerifiedAccount(message.author.userId))) return;
-  if (!(await claimXInteraction(message.author.userId))) return;
+  if (!allowlisted(message)) {
+    console.warn("[x] DROP allowlist");
+    return;
+  }
+  if (!(await isVerifiedAccount(message.author.userId))) {
+    console.warn("[x] DROP not verified");
+    return;
+  }
+  if (!(await claimXInteraction(message.author.userId))) {
+    console.warn("[x] DROP interaction cap");
+    return;
+  }
+  console.warn("[x] PASS all gates, sending");
   await thread.startTyping();
   await send(message.text, {
     auth: {

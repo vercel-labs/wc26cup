@@ -8,7 +8,7 @@ import {
 import type { Message } from "chat";
 import type { XVerificationClient } from "./x-verification.js";
 
-const INTERACTION_LIMIT = 10;
+const INTERACTION_LIMIT = 30;
 const INTERACTION_WINDOW_MS = 24 * 60 * 60 * 1000;
 const RATE_PREFIX = "wc26-x-rate/v1";
 // Avoid one X lookup per mention while limiting stale verification to five minutes.
