@@ -244,43 +244,57 @@ export const { bot, channel, send } = chatSdkChannel({
 
 // X flags every delivered post.mention.create as a mention, but a thread reply
 // auto-carries the parent's @mentions as a leading "replying to @a @b" prefix, so
-// the bot is listed as mentioned on replies that merely carried it along. Who the
-// reply targets can't separate a real ask ("@wc26bot who is playing today?", a
-// reply to the launch tweet) from noise, both look like third-party carryover.
-// What separates them is whether the user wrote an actual message. Take the
-// user-authored slice (display_text_range excludes the auto-prefix and trailing
-// link entities; offsets are Unicode codepoints, so index by codepoint), strip
-// any @handles the user typed, and require a real letter. A genuine question
-// answers even when the @ was auto-carried; an emoji reaction ("👀"), a bare
-// mention, or a link-only reply stays silent. Verified against real payloads in
+// the bot is listed as mentioned on replies where the human never typed its
+// handle (someone replying to another person in a thread the bot was once pinged
+// in, e.g. a side comment). Reply only when it is obvious the bot is being
+// addressed: either (1) the human typed @wc26bot inside their own text
+// (display_text_range marks where that authored text starts, after the auto
+// prefix; offsets are Unicode codepoints, so index by codepoint), or (2) it is a
+// direct reply to the bot's own tweet carrying a real message. Everything else —
+// a carried @ in a reply aimed at someone else, a bare ping, an emoji reaction, a
+// link-only reply — stays silent. Verified against real payloads in
 // .bot/x/captures.
 const HAS_LETTER = /\p{L}/u;
-const AT_MENTION = /@\w+/gu;
 interface XPostMention {
+  start?: number;
   id?: string;
   username?: string;
 }
 interface XPostShape {
   entities?: { mentions?: XPostMention[] };
   display_text_range?: number[];
+  in_reply_to_user_id?: string;
   text?: string;
 }
 function addressedToBot(message: Message): boolean {
   const post = (message.raw as { post?: XPostShape } | undefined)?.post;
-  const mentions = post?.entities?.mentions;
-  const mentioned = Array.isArray(mentions)
-    ? mentions.some((m) => m.id === botUserId || m.username?.toLowerCase() === botUserName)
-    : false;
-  if (!mentioned) {
+  if (!post) {
     return false;
   }
-  const text = typeof post?.text === "string" ? post.text : "";
-  const range = post?.display_text_range;
-  const display =
-    typeof range?.[0] === "number" && typeof range[1] === "number"
-      ? [...text].slice(range[0], range[1]).join("")
-      : text;
-  return HAS_LETTER.test(display.replace(AT_MENTION, ""));
+  const mentions = post.entities?.mentions;
+  const botMention = Array.isArray(mentions)
+    ? mentions.find((m) => m.id === botUserId || m.username?.toLowerCase() === botUserName)
+    : undefined;
+  if (!botMention) {
+    return false;
+  }
+  const range = post.display_text_range;
+  if (typeof range?.[0] !== "number" || typeof range[1] !== "number" || typeof botMention.start !== "number") {
+    return false;
+  }
+  // Obvious address 1: the human typed @wc26bot inside their own authored text,
+  // not X's auto-carried reply prefix.
+  if (botMention.start >= range[0]) {
+    return true;
+  }
+  // Obvious address 2: a direct reply to the bot's own tweet carrying a real
+  // message (a follow-up). Anything else is X carrying the @ into a reply the
+  // human aimed at someone else — they never said @wc26bot, so stay silent.
+  if (post.in_reply_to_user_id === botUserId) {
+    const text = typeof post.text === "string" ? post.text : "";
+    return HAS_LETTER.test([...text].slice(range[0], range[1]).join(""));
+  }
+  return false;
 }
 
 // Mention-only, no thread.subscribe(): on X, replies to the bot's post carry
