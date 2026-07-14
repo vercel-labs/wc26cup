@@ -242,51 +242,45 @@ export const { bot, channel, send } = chatSdkChannel({
   },
 });
 
-// X flags every delivered post.mention.create as a mention, but a reply in a
-// thread auto-carries the parent's @mentions as a leading "replying to @a @b"
-// prefix, so the bot shows up as mentioned on replies it was never addressed in.
-// X's display_text_range marks where the user-authored text starts, after that
-// prefix, and mention/range offsets are Unicode codepoints (spread the string to
-// index them, since JS slices UTF-16 units). Answer when the user typed the @
-// themselves (inside the display text), or when the reply is aimed at the bot (or
-// the author continuing their own thread to it) AND carries an actual worded
-// message. Stay silent on reactions like "👀" and on replies to third parties
-// where the bot is merely carried along. Fail open if the payload lacks the
-// fields. Verified against real payloads in .bot/x/captures.
+// X flags every delivered post.mention.create as a mention, but a thread reply
+// auto-carries the parent's @mentions as a leading "replying to @a @b" prefix, so
+// the bot is listed as mentioned on replies that merely carried it along. Who the
+// reply targets can't separate a real ask ("@wc26bot who is playing today?", a
+// reply to the launch tweet) from noise, both look like third-party carryover.
+// What separates them is whether the user wrote an actual message. Take the
+// user-authored slice (display_text_range excludes the auto-prefix and trailing
+// link entities; offsets are Unicode codepoints, so index by codepoint), strip
+// any @handles the user typed, and require a real letter. A genuine question
+// answers even when the @ was auto-carried; an emoji reaction ("👀"), a bare
+// mention, or a link-only reply stays silent. Verified against real payloads in
+// .bot/x/captures.
 const HAS_LETTER = /\p{L}/u;
+const AT_MENTION = /@\w+/gu;
 interface XPostMention {
-  start?: number;
   id?: string;
   username?: string;
 }
 interface XPostShape {
   entities?: { mentions?: XPostMention[] };
   display_text_range?: number[];
-  in_reply_to_user_id?: string;
   text?: string;
 }
 function addressedToBot(message: Message): boolean {
   const post = (message.raw as { post?: XPostShape } | undefined)?.post;
   const mentions = post?.entities?.mentions;
-  const botMention = Array.isArray(mentions)
-    ? mentions.find((m) => m.id === botUserId || m.username?.toLowerCase() === botUserName)
-    : undefined;
-  if (!botMention) {
+  const mentioned = Array.isArray(mentions)
+    ? mentions.some((m) => m.id === botUserId || m.username?.toLowerCase() === botUserName)
+    : false;
+  if (!mentioned) {
     return false;
   }
+  const text = typeof post?.text === "string" ? post.text : "";
   const range = post?.display_text_range;
-  if (typeof range?.[0] !== "number" || typeof botMention.start !== "number") {
-    return true;
-  }
-  if (botMention.start >= range[0]) {
-    return true;
-  }
-  const target = post?.in_reply_to_user_id;
-  if (target !== botUserId && target !== message.author.userId) {
-    return false;
-  }
-  const body = typeof post?.text === "string" ? [...post.text].slice(range[0], range[1]).join("") : "";
-  return HAS_LETTER.test(body);
+  const display =
+    typeof range?.[0] === "number" && typeof range[1] === "number"
+      ? [...text].slice(range[0], range[1]).join("")
+      : text;
+  return HAS_LETTER.test(display.replace(AT_MENTION, ""));
 }
 
 // Mention-only, no thread.subscribe(): on X, replies to the bot's post carry
