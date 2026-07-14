@@ -244,13 +244,12 @@ export const { bot, channel, send } = chatSdkChannel({
 
 // X flags every delivered post.mention.create as a mention, but a reply in a
 // thread auto-carries the parent's @mentions as a leading "replying to @a @b"
-// prefix, so the bot is listed as mentioned on replies it was never addressed in
-// (someone replying "👀" to a tweet that pinged the bot, or replying to a third
-// party). X's display_text_range marks where the user-authored text starts,
-// after that auto-prefix. Treat the bot as addressed only when its @ sits inside
-// the display text, or the reply is directly to the bot's own tweet. Fail open
-// when the payload lacks the fields so a real ping is never dropped. Verified
-// against real payloads in .bot/x/captures.
+// prefix, so the bot shows up as mentioned on replies it was never addressed in
+// (someone replying "👀" to a tweet that pinged the bot, or to a third party).
+// X's display_text_range marks where the user-authored text starts, after that
+// auto-prefix. Reply only when the bot's @ was typed by the user (its position
+// is inside the display text), never when it is just the carried-over prefix.
+// Verified against real payloads in .bot/x/captures.
 interface XPostMention {
   start?: number;
   id?: string;
@@ -259,22 +258,15 @@ interface XPostMention {
 interface XPostShape {
   entities?: { mentions?: XPostMention[] };
   display_text_range?: number[];
-  in_reply_to_user_id?: string;
 }
 function addressedToBot(message: Message): boolean {
   const post = (message.raw as { post?: XPostShape } | undefined)?.post;
   const mentions = post?.entities?.mentions;
-  if (!Array.isArray(mentions)) {
-    return true;
-  }
-  const botMention = mentions.find(
-    (m) => m.id === botUserId || m.username?.toLowerCase() === botUserName,
-  );
+  const botMention = Array.isArray(mentions)
+    ? mentions.find((m) => m.id === botUserId || m.username?.toLowerCase() === botUserName)
+    : undefined;
   if (!botMention) {
     return false;
-  }
-  if (post?.in_reply_to_user_id === botUserId) {
-    return true;
   }
   const range = post?.display_text_range;
   if (typeof range?.[0] !== "number" || typeof botMention.start !== "number") {
