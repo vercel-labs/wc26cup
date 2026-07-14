@@ -116,14 +116,15 @@ function barColor(lead: boolean) {
 }
 
 function headToHeadCard(title: string, teams: (Team & { flagUri: string })[], asOf: string) {
+  const total = teams.reduce((sum, team) => sum + team.pct, 0) || 100;
   const rows = teams.map((team, i) =>
-    el("div", { display: "flex", alignItems: "center", justifyContent: "space-between", height: 52 }, [
-      el("div", { display: "flex", alignItems: "center" }, [
+    el("div", { display: "flex", alignItems: "center", height: 52 }, [
+      el("div", { display: "flex", alignItems: "center", width: 280 }, [
         flagImg(team.flagUri, 42),
         el("div", { display: "flex", marginLeft: 20, fontSize: 30, color: nameColor(i === 0) }, team.name.toLowerCase()),
       ]),
-      bar(team.pct, 100, barColor(i === 0), 260),
-      el("div", { display: "flex", width: 104, justifyContent: "flex-end", fontSize: 30, color: pctColor(i === 0) }, `${team.pct.toFixed(1)}%`),
+      bar(team.pct, total, barColor(i === 0), 300),
+      el("div", { display: "flex", width: 162, justifyContent: "flex-end", fontSize: 30, color: pctColor(i === 0) }, `${team.pct.toFixed(1)}%`),
     ]),
   );
   return shell(cardHeight("head_to_head", 2), title, rows, asOf, 36);
@@ -132,14 +133,14 @@ function headToHeadCard(title: string, teams: (Team & { flagUri: string })[], as
 function drawCard(title: string, teams: (Team & { flagUri: string })[], asOf: string) {
   const max = teams[0]?.pct ?? 100;
   const rows = teams.map((team, i) =>
-    el("div", { display: "flex", alignItems: "center", justifyContent: "space-between", height: 46 }, [
-      el("div", { display: "flex", alignItems: "center" }, [
+    el("div", { display: "flex", alignItems: "center", height: 46 }, [
+      el("div", { display: "flex", alignItems: "center", width: 300 }, [
         el("div", { display: "flex", width: 30, fontSize: 24, color: "#4b5563" }, `${i + 1}`),
         flagImg(team.flagUri, 38),
         el("div", { display: "flex", marginLeft: 18, fontSize: 26, color: nameColor(i === 0) }, team.name.toLowerCase()),
       ]),
-      bar(team.pct, max, barColor(i === 0), 260),
-      el("div", { display: "flex", width: 88, justifyContent: "flex-end", fontSize: 26, color: pctColor(i === 0) }, `${team.pct.toFixed(1)}%`),
+      bar(team.pct, max, barColor(i === 0), 280),
+      el("div", { display: "flex", width: 162, justifyContent: "flex-end", fontSize: 26, color: pctColor(i === 0) }, `${team.pct.toFixed(1)}%`),
     ]),
   );
   return shell(cardHeight("draw", teams.length), title, rows, asOf, 26);
